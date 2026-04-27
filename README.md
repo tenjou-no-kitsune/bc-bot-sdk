@@ -1,93 +1,51 @@
-# Ropeybot
+# Ropeybot (ver. 天上の狐)
+> a node-based socket.io-client serving as a bot sdk for BC based on [FriendsOfBC/ropeybot](https://github.com/FriendsOfBC/ropeybot)
 
-A node-based BC bot based on the old bot-api. Its functionality is divided up into
-'games' and you configure the bot to run one of them via its config file.
+> [!NOTE]  
+> with regards to licensing, please refer to the upstream original repository!  
+> this branch acts as a **personal** de facto maintained version of the original `ropeybot`
+> whilst the maintainers are inactive...
 
-Most code here is free to use (Apache licensed) but some is taken with
-permission from the original bot hub (eg. kidnappers game, roleplay challenge).
+initially, this series of branches weren't intended to exist and
+was just untracked uncommitted code on a local clone of the original repository
+whilst hoping for the original maintainers to return, but after a month and
+lots of changes, it was apparent that it wouldn't be happening any time soon,
+so this was made in an attempt to track changes done whilst the maintainers are away,
+and to have an easier time syncing in the future if need be...
 
-We hope that this will be useful for people to make fun and interesting bots
-for the club! You're also welcome to run the bots included yourself.
+if possible, it would have been ideal to continue just using the upstream repository
+without many changes, but it's not really feasible long-term without active maintenance,
+hence why this spinoff of `ropeybot` was created!
 
-To make a new game, you can copy the 'petspa' game file and use that as a base, and add
-your new file into bot.ts.
+## Fork Structure
+as said earlier, this fork serves as a maintained and tested version whilst
+there are no updates being made to the upstream repository, you may use the code/branches as you wish,
+whilst abiding by the original licensing rules, however, usage of it will not be
+documented as this was meant to be a personal bot development kit, and also because
+it wasn't meant to be distributed in the first place!
 
-Usual club ettiquette applies, eg:
+to begin with, `sdk/*` branches belong to this (ver. 天上の狐) spinoff,
+whilst other branches are all intended for PRs to the original `ropeybot` repository...
 
-- Make sure people know your bot is a bot, not a real player
-- Make sure people consent before your bot binds them / changes their clothing etc.
-- Watch how many messages your bot sends. Even if it stays under the ratelimit, constantly
-  sending messages will affect the server.
-- Make bots fun / interesting / useful, rather than to just sit in rooms.
+### Stacked Branches
 
-## Code layout
+| Hierarchy | Branch Name | Purpose |
+| :--- | :--- | :--- |
+| **L1** | `sdk/main` | **Crucial Fixes:** Mirror of the original repo w/ essential bug & stability fixes |
+| **L2** | `sdk/feat/upstream-new-features` | **New Features:** Features added to the original SDK version |
+| **L3** | `sdk/upgrade/bc-dependency` | **BC Upgrade:** Moving BC dependency from original SDK version to the latest version |
+| **L4** | `sdk/feat/upgraded-new-features` | **Modern Features:** New additions that rely on upgraded BC version |
+| **L5** | `sdk/bot-collection/main` | **Active Work:** Final integration and actual bot collection development |
 
-Anything in src/hub is from the original bot hub. This includes the 'kidnappers' game and the
-roleplay challenge bot. These are copied in as they were, but with additions since.
+each subsequent branch is based on the previous in the hierarchy... i.e.
+- **L1** is based off the original repo
+- **L2** is based on **L1**
+- **L3** is based on **L2**
 
-Things in src/games use a newer, more event-based API. If you write new bots, they should
-probably look like the ones in here.
+### Propagation Workflow
 
-Some things are unfinished and imperfect, but there should be enough here to make working and
-fun bots! Improvements and fixes are always welcome.
+1. checkout to **L5**
+2. rebase on whichever base hierarchy, with `--update-refs`
+3. on conflict, solve, stage, then rebase `--continue`
+4. on disaster, rebase `--abort`
 
-## Running
-
-The bot can either be run locally or via the Docker image.
-
-### Running Locally
-
-- Get an environment with NodeJS, pnpm (https://pnpm.io/installation) and git
-- Check out the bot's code
-  `git clone https://github.com/FriendsOfBC/ropeybot.git`
-- Copy `config.sample.json` to `config.json` and customise it: you'll need to provide
-  at least a username and password for an account that the bot can log in as. You can
-  also choose what game the bot will run.
-- Enter the directory and install the dependencies:
-  `cd ropeybot`
-  `pnpm install`
-- Start the bot!
-  `pnpm start`
-
-### Running with Docker
-
-- Install docker
-- Create a config file as in the steps for running locally
-- Run the bot, mapping in the config file you just made:
-  `docker run --rm -it -v ${PWD}/config.json:/bot/cfg/config.json ghcr.io/FriendsOfBC/ropeybot:main`
-- Alternatively you can build the docker container yourself:
-  `docker build --tag ropeybot .`
-- And then run said container with the config file mapped in
-  `docker run --rm -it -v ${PWD}/config.json:/bot/cfg/config.json ropeybot`
-
-## Games
-
-The bot comes with some built games. In brackets is the value to use for 'game' in the config
-file to run that game.
-
-### Dare Game ('dare')
-
-A very simple game where players add dares and then draw them without knowing who added
-each dare.
-The dares added by players are stored in two files in the bot's working directory:
-dares.json and unuseddares.json: delete both of these files to reset the dares.
-
-### Pet Spa ('petspa')
-
-This is an example of how to use the API to make an interactive map room, but also
-applies to non map rooms. You can use this file as a base for things like how to react
-when players enter areas on a map, adding restraints and setting their properties, sending
-and reacting to messages.
-
-### Kidnappers ('kidnappers')
-
-From the original bot hub. Code is mostly unmodified from its original state.
-
-### Roleplay challenge ('roleplay')
-
-Also from the original bot hub.
-
-### Maid's Party Night ('maidspartynight')
-
-Also from the original bot hub, a single player adventure. Needs a second bot account
-(user2 and password2 in the config). Probably buggy!
