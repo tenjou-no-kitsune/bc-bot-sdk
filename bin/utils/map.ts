@@ -6,10 +6,13 @@ type Pos = ChatRoomMapPos;
 const createRange = (start: number, end: number) => 
     Array.from({ length: end - start + 1 }, (_, i) => start + i);
 
+export const areTilesEqual = (tile1: Pos, tile2: Pos) =>
+    tile1.X === tile2.X && tile1.Y === tile2.Y;
+
 export const createTileList = (tiles: Pos[]) => {
     return Object.freeze(Object.assign(tiles, {
         covers(pos: Pos) {
-            return tiles.includes(pos);
+            return tiles.some(t => areTilesEqual(t, pos));
         }
     }));
 };
