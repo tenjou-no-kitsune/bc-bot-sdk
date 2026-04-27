@@ -1,159 +1,130 @@
-/*
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *       http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+import path from "node:path";
+//@ts-ignore
+import { API_Connector, RoomDefinition } from "bc-bot";
+import { MapRoom, MapRoomStore } from "./rooms/map-room";
+import { LogContext, ObjStore } from "./utils";
+import { configureClass, type BotConfig } from "./config";
+import bot from "./bot";
 
-import { API_Connector } from "bc-bot";
-import { KidnappersGameRoom } from "./hub/logic/kidnappersGameRoom";
-import { RoleplaychallengeGameRoom } from "./hub/logic/roleplaychallengeGameRoom";
-import { Dare } from "./games/dare";
-import { readFile } from "fs/promises";
-import { ConfigFile } from "./config";
-import { Db, MongoClient } from "mongodb";
-import { PetSpa } from "./games/petspa";
-import { MaidsPartyNightSinglePlayerAdventure } from "./hub/logic/maidsPartyNightSinglePlayerAdventure";
-import { Casino } from "./games/casino";
-
-const SERVER_URL = {
-    live: "https://bondage-club-server.herokuapp.com/",
-    test: "https://bondage-club-server-test.herokuapp.com/",
+type Bot = {
+    name: string;
+    connector: API_Connector,
+    instance: MapRoom,
 };
 
-export interface RopeyBot {
-    connector: API_Connector;
-    config: ConfigFile;
-    db?: Db;
-    game: string;
+const createBot = async ({ name, account, room, mixins }: BotConfig): Promise<Bot | string> => {
+    const SERVER_URL = "https://bondage-club-server.herokuapp.com/";
+
+    //#region store
+    const store = ObjStore.create<MapRoomStore>({
+        name,
+        file: { path: `store.${name}.json` },
+        data: {
+            default: {
+                defs: {
+                    background: room.options.defs.background,
+                    lists: {
+                        admin: room.options.defs.lists.admin,
+                        ban: room.options.defs.lists.ban,
+                        whitelist: room.options.defs.lists.whitelist,
+                    },
+                },
+                map: {
+                    name: room.options.map.name,
+                    description: room.options.map.description,
+                    code: room.options.map.code,
+                },
+                bot: { description: room.options.bot.description },
+            },
+        },
+    });
+    const loaded = store.load();
+    room.options.map.name = loaded.map.name;
+    room.options.map.description = loaded.map.description;
+    room.options.map.code = loaded.map.code;
+    room.options.bot.description = loaded.bot.description;
+    room.options.defs.background = loaded.defs.background;
+    room.options.defs.lists.admin = loaded.defs.lists.admin;
+    room.options.defs.lists.ban = loaded.defs.lists.ban;
+    room.options.defs.lists.whitelist = loaded.defs.lists.whitelist;
+    //#endregion
+
+    const defn = room.definition as RoomDefinition;
+    defn.Name = room.options.map.name;
+    defn.Description = room.options.map.description;
+    defn.Background = room.options.defs.background;
+    defn.Admin = room.options.defs.lists.admin;
+    defn.Ban = room.options.defs.lists.ban;
+    (defn as unknown as { Whitelist: number[] })["Whitelist"] = room.options.defs.lists.whitelist;
+    const connector = new API_Connector(SERVER_URL, account.username, account.password, "live");
+    await connector.joinOrCreateRoom(defn);
+
+    let RoomClass = configureClass({ name, account, room, mixins });
+    if (!RoomClass) return name;
+
+    const instance = new RoomClass({ conn: connector, opts: room.options, store, mixins });
+    await instance.init();
+
+    return { name, connector, instance };
 }
 
-export async function startBot(): Promise<RopeyBot> {
-    process.on("SIGINT", () => {
-        console.log("SIGINT received, exiting");
-        process.exit(0);
+let bots: (string | Bot)[] | null = null;
+const originalExit = process.exit;
+process.exit = (code) => {
+  console.trace(`Process.exit(${code}) was called by:`);
+  return originalExit(code);
+};
+const cleanup = async () => {
+    if (bots) await Promise.all(bots.flatMap(b => typeof b !== "string" ? [b] : []).map(b =>
+        b.instance.exit(),
+    ));
+}
+const exit = async (...params: Parameters<typeof process.exit>) => {
+    await cleanup();
+    process.exit(...params);
+};
+
+async function main() {
+
+    //#region register signal handlers
+    process.on("SIGINT", async () => {
+        console.warn("SIGINT received, exiting");
+        exit(0);
     });
 
     process.on("SIGTERM", () => {
-        console.log("SIGTERM received, exiting");
-        process.exit(0);
+        console.warn("SIGTERM received, exiting");
+        exit(0);
     });
 
-    const cfgFile = process.argv[2] ?? "./config.json";
-
-    const configString = await readFile(cfgFile, "utf-8");
-    const config = JSON.parse(configString) as ConfigFile;
-
-    const serverUrl = config.url ?? SERVER_URL[config.env];
-
-    if (!serverUrl) {
-        console.log("env must be live or test");
-        process.exit(1);
-    }
-
-    let db;
-    if (config.mongo_uri && config.mongo_db) {
-        const mongoClient = new MongoClient(config.mongo_uri, {
-            ssl: true,
-            tls: true,
+    process.on("beforeExit", (code) => {
+        console.warn(`beforeExit received, exiting with code ${code}`);
+        cleanup().then(() => {
+            console.info("beforeExit cleanup completed!")
         });
-        console.log("Connecting to mongo...");
-        await mongoClient.connect();
-        console.log("...connected!");
-        db = mongoClient.db(config.mongo_db);
-        await db.command({ ping: 1 });
-        console.log("...ping successful!");
+    });
+    //#endregion
+
+    LogContext.setLogLevel("info");
+    bots = await Promise.all(bot.configs.map(cfg =>
+        LogContext.run<ReturnType<typeof createBot>>(
+            { path: path.join("logs", `${cfg.name}.log`), prefix: cfg.name },
+            async () => await createBot(cfg),
+        )
+    ));
+    bots.forEach((bot) => {
+        if (typeof bot === "string")
+            return console.warn(`bot [${bot}] failed to create!`);
+        console.log(`bot [${bot.name}] created!`);
+    });
+    if (!bots.filter(b => typeof b !== "string").length) {
+        console.log("no bots running, quitting!");
+        exit(0);
     }
-
-    const connector = new API_Connector(
-        serverUrl,
-        config.user,
-        config.password,
-        config.env,
-    );
-    await connector.joinOrCreateRoom(config.room);
-
-    switch (config.game) {
-        case undefined:
-            break;
-        case "kidnappers":
-            console.log("Starting game: Kidnappers");
-            const kidnappersGame = new KidnappersGameRoom(connector, config);
-            connector.accountUpdate({ Nickname: "Kidnappers Bot" });
-            connector.setBotDescription(KidnappersGameRoom.description);
-            connector.startBot(kidnappersGame);
-            break;
-        case "roleplay":
-            console.log("Starting game: Roleplay challenge");
-            const roleplayGame = new RoleplaychallengeGameRoom(
-                connector,
-                config,
-            );
-            connector.setBotDescription(RoleplaychallengeGameRoom.description);
-            connector.startBot(roleplayGame);
-            break;
-        case "maidspartynight":
-            console.log("Starting game: Maid's Party Night");
-            if (!config.user2 || !config.password2) {
-                console.log("Need user2 and password2 for Maid's Party Night");
-                process.exit(1);
-            }
-            const connector2 = new API_Connector(
-                serverUrl,
-                config.user2,
-                config.password2,
-                config.env,
-            );
-            const maidsPartyNightGame =
-                new MaidsPartyNightSinglePlayerAdventure(connector, connector2);
-            connector.startBot(maidsPartyNightGame);
-            break;
-        case "dare":
-            console.log("Starting game: dare");
-            connector.accountUpdate({ Nickname: "Dare Bot" });
-            new Dare(connector);
-            connector.setBotDescription(Dare.description);
-            break;
-        case "petspa":
-            console.log("Starting game: Pet Spa");
-            const petSpaGame = new PetSpa(connector);
-            await petSpaGame.init();
-            connector.setBotDescription(PetSpa.description);
-            break;
-        case "casino":
-            console.log("Starting game: Casino");
-            new Casino(connector, db, config.casino);
-            break;
-        default:
-            console.log("No such game " + config.game);
-            process.exit(1);
-    }
-
-    return {
-        connector,
-        config,
-        db,
-        game: config.game,
-    };
-}
-
-async function main() {
-    const { game } = await startBot();
-
-    if (!game) {
-        console.error("No game specified!");
-        process.exit(1);
-    }
+    console.log(`all up and running!`);
 }
 
 main().catch((e) => {
     console.error(e);
-    process.exit(1);
+    exit(1);
 });

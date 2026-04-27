@@ -6,9 +6,11 @@
         "preinstall": "cd src && pnpm install",
         "types": "tsc",
         "prettier": "prettier -c .",
-        "compile:bc-bot": "cd src && npm run compile",
-        "bundle": "npm run compile:bc-bot && esbuild bin/main.ts --bundle --platform=node --outfile=dist/bundle.js --sourcemap",
-        "start": "npm run compile:bc-bot && tsx bin/main.ts",
+        "compile:bc-bot": "cd src && pnpm run compile",
+        "bundle": "pnpm run compile:bc-bot && pnpm run build && pnpm run build:min",
+        "build": "esbuild bin/main.ts --bundle --platform=node --outfile=dist/bundle.js --sourcemap",
+        "build:min": "esbuild bin/main.ts --bundle --platform=node --outfile=dist/bundle.min.js --sourcemap --minify",
+        "start": "pnpm run compile:bc-bot && tsx bin/main.ts",
         "docker": "pnpm run bundle && docker build -t ropeybot --no-cache ."
     },
     "dependencies": {
@@ -16,9 +18,7 @@
         "bc-stubs": "130.0.0",
         "lodash": "^4.17.21",
         "lz-string": "^1.5.0",
-        "mongodb": "^6.21.0",
-        "prettier": "^3.7.4",
-        "prom-client": "^14.2.0"
+        "prettier": "^3.7.4"
     },
     "devDependencies": {
         "@tsconfig/node18": "^18.2.6",

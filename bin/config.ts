@@ -1,34 +1,38 @@
-/*
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *       http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 
-import { type RoomDefinition } from "bc-bot";
-import { type CasinoConfig } from "./games/casino";
+//@ts-ignore
+import { RoomDefinition } from "bc-bot";
+import { PartialMixinOptions } from "./mixins";
+import { RoomClasses, RoomOptions } from "./rooms";
 
-export interface ConfigFile {
-    user: string;
-    password: string;
-    env: "live" | "test";
-    url?: string;
-    game: string;
-    superusers: number[];
-    room: RoomDefinition;
-    mongo_uri?: string;
-    mongo_db?: string;
-    members: number[];
+export type BotConfig = {
+    name: string,
+    account: {
+        username: string,
+        password: string,
+    },
+    room: {
+        definition: Partial<RoomDefinition>,
+        options: RoomOptions,
+    },
+} & PartialMixinOptions;
 
-    user2: string;
-    password2: string;
+import { MapRoomLike } from "./rooms";
+import { ProviderMixins } from "./mixins";
+import { obj } from "./utils";
 
-    casino?: CasinoConfig;
-}
+export const configureClass = (config: BotConfig): MapRoomLike | null => {
+    let { cls, reqMixins } = RoomClasses[config.room.options.type ?? "room"] ?? RoomClasses.room;
+
+    if (reqMixins && (!config.mixins || !reqMixins.every(m => m in config.mixins!))) {
+        console.error(`bot [${config.name}] failed to create, check every required mixin is added!`);
+        return null;
+    }
+
+    let providerMixinKeys = obj(ProviderMixins).keys();
+    if (reqMixins) providerMixinKeys = providerMixinKeys.filter(k => !reqMixins.includes(k));
+    providerMixinKeys.forEach(k => {
+        if (config.mixins && config.mixins[k]) cls = ProviderMixins[k](cls);
+    });
+
+    return cls;
+};
