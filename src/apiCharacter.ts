@@ -347,6 +347,27 @@ export class API_Character {
         return true;
     }
 
+    public get AllowItem() {
+        const botId = this.connection.Player.MemberNumber;
+
+        switch (this.data.ItemPermission ?? 5) {
+            case 0: // Everyone, no exceptions
+                return true;
+            case 1: // Everyone, except blacklist
+                return !this.data.BlackList.includes(botId);
+            case 2: // Owner, Lovers, whitelist & Dominants
+                if ((this.connection.Player.Dominance + 25) >= this.Dominance) // dominant test
+                    return true;
+            case 3: // Owner, Lovers and whitelist only
+                if (this.data.WhiteList.includes(botId)) // whitelist test
+                    return true;
+            case 4: // Owner and Lovers only (ditto below)
+            case 5: // Owner only (not going to bother with checks, because no way bot is owner, maybe will add in the future)
+            default:
+                return false;
+        }
+    }
+
     public GetAllowItem(): Promise<boolean> {
         return this.connection.queryItemAllowed(this.MemberNumber);
     }
