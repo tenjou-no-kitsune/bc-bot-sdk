@@ -267,7 +267,7 @@ namespace BCB {
 
         const fixedRoles = Object.freeze(() => {
             const createIds = (name: string, ids: number[]) => Object.assign(ids, {
-                name,
+                _name: name,
             });
         
             return Object.freeze({
@@ -295,7 +295,7 @@ namespace BCB {
         
         type RoleKey = keyof RoleLists;
         const createRoleList = (name: string, key: RoleKey) =>
-            Object.assign(() => internalLists[key], { name });
+            Object.assign(() => internalLists[key], { _name: name });
         type RoleMapping = typeof mapping;
         const mapping = {
             ...fixedRoles,
@@ -304,15 +304,9 @@ namespace BCB {
             Immune: createRoleList("Immune", "immunity"),
         };
         const roles: Record<keyof RoleMapping, string> = Object.fromEntries(
-            Object.entries(mapping).map(([key, list]) => [key, list.name])
+            Object.entries(mapping).map(([key, list]) => [key, list._name])
         ) as never;
 
-        const lists = (Object.keys(internalLists) as RoleKey[])
-            .reduce<Record<RoleKey, RoleList>>((acc, key) => {
-                acc[key] = createList(key);
-                return acc;
-            }, {} as Record<RoleKey, RoleList>);
-        type RoleList = ReturnType<typeof createList>;
         const createList = (key: keyof RoleLists) => {
             const queueUpdate = () => store.update(internalLists);
             return {
@@ -332,11 +326,17 @@ namespace BCB {
                 },
             };
         };
+        const lists = (Object.keys(internalLists) as RoleKey[])
+            .reduce<Record<RoleKey, RoleList>>((acc, key) => {
+                acc[key] = createList(key);
+                return acc;
+            }, {} as Record<RoleKey, RoleList>);
+        type RoleList = ReturnType<typeof createList>;
 
         return {
             ...roles,
             mapping: Object.fromEntries(
-                Object.entries(mapping).map(([, list]) => [list.name, list])
+                Object.entries(mapping).map(([, list]) => [list._name, list])
             ),
             lists,
         };
