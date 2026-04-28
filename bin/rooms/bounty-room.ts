@@ -663,8 +663,9 @@ namespace BCB {
                 },
                 remove: (index: number) => {
                     if (!catalogue.favors[index]) return withReason("non-existent index");
+                    const favor = catalogue.favors[index];
                     updateFavors((favors) => favors.splice(index, 1));
-                    return true;
+                    return favor;
                 },
                 get list() { return catalogue.favors; }
             },
@@ -800,6 +801,12 @@ namespace BCB {
             }
             return hydratePlayerStub(stub);
         };
+
+        const getOwedFavors = () => stores.players.values.flatMap(
+            player => player.inventory.favors.map(
+                (favor, index) => ({ forId: player.id, forIndex: index, name: favor })
+            )
+        ).map((val, index) => ({ index, ...val }));
         //#endregion
 
         return {
@@ -901,7 +908,7 @@ namespace BCB {
             //#region favor ops
             purchaseFavor: (player: number | Player, favor: Favor) => {
                 if (typeof player === "number") player = requirePlayer(player);
-                if (player.gold < favor.cost) return "not enough gold";
+                if (player.gold < favor.cost) return withReason("not enough gold");
                 return stores.players.update(player.id.toString(), (prev) => ({
                     gold: prev.gold - favor.cost,
                     inventory: {
@@ -912,9 +919,11 @@ namespace BCB {
                     },
                 }));
             },
-            getPurchasedFavors: (player: number | Player) => {
+            getOwedFavors: (player: number | Player | null = null) => {
+                const owed = getOwedFavors();
+                if (!player) return owed;
                 if (typeof player === "number") player = requirePlayer(player);
-                return stores.players.get(player.id.toString())!.inventory.favors;
+                return owed.filter(f => f.forId === player.id);
             },
             resolveFavor: (player: number | Player, index: number) => {
                 if (typeof player === "number") player = requirePlayer(player);
@@ -1376,6 +1385,85 @@ export class BountyRoom extends MixedMapRoomClass {
             },
         });
         //#endregion
+
+        //#region favors mgmt
+        // !addfavor (price) (name)
+        this._cmd.register({
+            name: "addfavor",
+            desc: "(price) (name) — adds favor to store [please quote the name for spaces]",
+            roles: [this.#roles.Admin],
+            callback: (ctx) => {
+                const [strPrice, favorName] = ctx.cmd.args;
+                if (!strPrice || !isValidNumber(strPrice))
+                    return ctx.reply(`(❌ Usage: !addfavor (price) (name) ~ please provide a valid price)`);
+                if (!favorName)
+                    return ctx.reply(`(❌ Usage: !addfavor (price) (name) ~ please provide a valid name)`);
+
+                const price = parseInt(strPrice);
+                if (price <= 0)
+                    return ctx.reply(`(❌ Usage: !addfavor (price) (name) ~ price should have a value more than 0 gold)`);
+
+                this.#shop.favors.add({ cost: price, name: favorName });
+                ctx.reply(`(✅ Favor ${favorName} costing ${price} gold has been added to the store.)`);
+            },
+        });
+
+        // !removefavor (index)
+        this._cmd.register({
+            name: "removefavor",
+            desc: "(index) — removes favor from store at specified index",
+            roles: [this.#roles.Admin],
+            callback: (ctx) => {
+                const [strIndex] = ctx.cmd.args;
+                if (!strIndex || !isValidNumber(strIndex)) return ctx.reply(`(❌ Usage: !removefavor (index) ~ please provide a valid index)`);
+                const index = parseInt(strIndex)
+
+                const favors = this.#shop.favors.list;
+                if (index < 1 || index > favors.length)
+                    return ctx.reply(`(❌ Usage: !removefavor (index) ~ ${index} index is not valid, check !displaystore)`);
+
+                const removed = this.#shop.favors.remove(index - 1);
+                if (!removed) return ctx.reply(`(❌ Failed to remove favor from store: ${removed.reason})`);
+                ctx.reply(`(✅ Favor ${removed.name} costing ${removed.cost} gold has been removed from the store.)`);
+            },
+        });
+
+        // !removeOwed (index)
+        this._cmd.register({
+            name: "removeOwed",
+            desc: "(index) — removes owed favor from owed list at specified index",
+            roles: [this.#roles.Admin],
+            callback: (ctx) => {
+                const [strIndex] = ctx.cmd.args;
+                if (!strIndex || !isValidNumber(strIndex)) return ctx.reply(`(❌ Usage: !removeOwed (index) ~ please provide a valid index)`);
+                const index = parseInt(strIndex)
+
+                const favors = this.#core.getOwedFavors();
+                if (index < 1 || index > favors.length)
+                    return ctx.reply(`(❌ Usage: !removeOwed (index) ~ ${index} index is not valid, check !displayOwed)`);
+
+                const { forId, forIndex, name } = favors[index - 1];
+                this.#core.resolveFavor(forId, forIndex);
+                ctx.reply(`(✅ Favor ${name} for #${forId} has been resolved.)`);
+            },
+        });
+
+        // !displayOwed
+        this._cmd.register({
+            name: "displayOwed",
+            desc: "— displays the list of owed favors",
+            roles: [this.#roles.Admin],
+            callback: (ctx) => {
+                const favors = this.#core.getOwedFavors();
+                ctx.reply(
+                    `(${favors.length} Owed Favors:`,
+                    ...favors.map(({ index, forId, name }) =>
+                        `[${index + 1}]: ${name} owed to #${forId}`,
+                    ),
+                );
+            },
+        });
+        //#endregion
         //#endregion
 
         //#region prison mgmt
@@ -1432,6 +1520,21 @@ export class BountyRoom extends MixedMapRoomClass {
             },
         });
 
+        // !favors
+        this._cmd.register({
+            name: "favors",
+            desc: "— shows the list of bought favors you are owed",
+            callback: (ctx) => {
+                const favors = this.#core.getOwedFavors(ctx.sender.MemberNumber);
+                ctx.reply(
+                    `(${favors.length} Owed Favors:`,
+                    ...favors.map(({ name }) =>
+                        `- ${name}`,
+                    ),
+                );
+            },
+        });
+
         // !rankup
         this._cmd.register({
             name: "rankup",
@@ -1482,6 +1585,43 @@ export class BountyRoom extends MixedMapRoomClass {
                     );
                 });
             }
+        });
+        //#endregion
+
+        //#region favor store
+        // !displaystore
+        this._cmd.register({
+            name: "displaystore",
+            desc: "— displays the list of favors for sale",
+            callback: (ctx) => {
+                const favors = this.#shop.favors.list;
+                ctx.reply(
+                    `(${favors.length} Store Favors:`,
+                    ...favors.map(({ cost, name }, index) =>
+                        `[${index + 1}]: ${name} (${cost} gold)`,
+                    ),
+                );
+            },
+        });
+
+        // !buy (index)
+        this._cmd.register({
+            name: "buy",
+            desc: "(index) — buys the favor at the specified index in the store",
+            callback: (ctx) => {
+                const [strIndex] = ctx.cmd.args;
+                if (!strIndex || !isValidNumber(strIndex)) return ctx.reply(`(❌ Usage: !buy (index) ~ please provide a valid index)`);
+                const index = parseInt(strIndex)
+
+                const favors = this.#shop.favors.list;
+                if (index < 1 || index > favors.length)
+                    return ctx.reply(`(❌ Usage: !buy (index) ~ ${index} index is not valid, check !displaystore)`);
+
+                const favor = favors[index - 1];
+                const purchased = this.#core.purchaseFavor(ctx.sender.MemberNumber, favor);
+                if (!purchased) return ctx.reply(`(❌ Failed to buy favor from store: ${purchased.reason})`);
+                ctx.reply(`(✅ Favor ${favor.name} has been bought.)`);
+            },
         });
         //#endregion
 
