@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { truncate } from "./common";
 
 type ObjStoreOptions<T extends object> = {
@@ -107,6 +108,11 @@ const ObjStore = {
 
         //#region (sanity check)
         (() => {
+            const { dir } = path.parse(file.path);
+            if (!fs.existsSync(dir || ".")) {
+                console.info(prefix, "FUNC(create):", "store directory not found, creating recursively");
+                fs.mkdirSync(dir, { recursive: true });
+            }
             if (!fs.existsSync(file.path)) {
                 console.info(prefix, "FUNC(create):", "store not found, creating with default");
                 writeObj(data.default);
