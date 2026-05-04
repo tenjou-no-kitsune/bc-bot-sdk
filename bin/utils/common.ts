@@ -56,8 +56,20 @@ namespace DeepUtils {
             (acc, fillCount) => acc + fillCount,
             0,
         );
+
+        const apply = <T extends Obj>(patch: DeepPartial<T>, target: T): T => {
+            walk(patch, target, (inKey, inVal, outObj) => {
+                const outVal = outObj[inKey];
+                if (obj.is(inVal) && obj.is(outVal)) {
+                    apply(inVal, outVal);
+                } else {
+                    outObj[inKey] = inVal;
+                }
+            });
+            return target;
+        };
         
-        return { fill };
+        return { fill, apply };
     })();
 }
 
