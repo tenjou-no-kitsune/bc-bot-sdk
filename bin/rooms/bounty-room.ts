@@ -1,9 +1,10 @@
 //@ts-ignore
 import { API_Character, AssetGet } from "bc-bot";
 import { CommandContext, WithCommands } from "../mixins";
-import { DeepPartial, ObjStore, isValidNumber, map, parseApiCharObj, pickRandom, withReason } from "../utils";
+import { DeepPartial, ObjStore, as, isValidNumber, map, parseApiCharObj, pickRandom, withReason } from "../utils";
 import { GenericMapRoomOptions, MapRoom, MapRoomArguments } from "./map-room";
 import { deepMerge } from "../utils/obj-store";
+import { __ } from "../features/bounty";
 
 //#region "Vendored" Variables
 /*/#region Script to "Vendor" (BC Game Client)
@@ -271,9 +272,9 @@ namespace BCB {
             });
         
             return Object.freeze({
-                SuperAdmin: createIds("Super Admin", membersOf.SuperAdmin),
-                GoldManager: createIds("Gold Manager", membersOf.GoldManager),
-                BountyManager: createIds("Bounty Manager", membersOf.BountyManager),
+                SuperAdmin: createIds(__.roles.names.super_admin, membersOf.SuperAdmin),
+                GoldManager: createIds(__.roles.names.gold_manager, membersOf.GoldManager),
+                BountyManager: createIds(__.roles.names.bounty_manager, membersOf.BountyManager),
             });
         })();
 
@@ -299,9 +300,9 @@ namespace BCB {
         type RoleMapping = typeof mapping;
         const mapping = {
             ...fixedRoles,
-            Admin: createRoleList("Admin", "admin"),
-            Dom: createRoleList("Dom", "dom"),
-            Immune: createRoleList("Immune", "immunity"),
+            Admin: createRoleList(__.roles.names.admin, "admin"),
+            Dom: createRoleList(__.roles.names.dom, "dom"),
+            Immune: createRoleList(__.roles.names.immune, "immunity"),
         };
         const roles: Record<keyof RoleMapping, string> = Object.fromEntries(
             Object.entries(mapping).map(([key, list]) => [key, list._name])
@@ -605,9 +606,9 @@ namespace BCB {
                 }
             ) {
                 if (!target.AllowItem)
-                    return "insufficient permissions to imprison target";
+                    return __.prison.err.no_add_restraint_permission;
                 if (store.get(bounty.id.toString()))
-                    return "target is already a prisoner";
+                    return __.prison.err.already_a_prisoner;
                 target.mapTeleport(cell);
                 strip(target);
                 restrain({ botName, targetName, target });
@@ -619,7 +620,7 @@ namespace BCB {
                 if (!target.AllowItem)
                     target.connection.SendMessage(
                         "Whisper",
-                        `(⚠️ The bot does not have permissions to remove the restraints. You will have to do it yourself.)`,
+                        __.prison.warn.no_remove_restraint_permission,
                         target.MemberNumber,
                     );
                 else
@@ -662,7 +663,7 @@ namespace BCB {
                     return true;
                 },
                 remove: (index: number) => {
-                    if (!catalogue.favors[index]) return withReason("non-existent index");
+                    if (!catalogue.favors[index]) return withReason(__.shop.err.non_existent_index);
                     const favor = catalogue.favors[index];
                     updateFavors((favors) => favors.splice(index, 1));
                     return favor;
@@ -813,8 +814,8 @@ namespace BCB {
             requirePlayer, getBounty, requireBounty,
             //#region bounty ops
             canHaveBounty: (id: number) => {
-                if (prison.has(id)) return withReason("is imprisoned");
-                if (roles.lists.immunity.has(id)) return withReason("is immune" );
+                if (prison.has(id)) return withReason(__.core.err.is_imprisoned);
+                if (roles.lists.immunity.has(id)) return withReason(__.core.err.is_immune);
                 return true;
             },
             claimBounty: (claimer: number | Player, bounty: number | Bounty | null) => {
@@ -831,8 +832,8 @@ namespace BCB {
             clearBounty: (clearer: number | Player, bounty: number | Bounty | null) => {
                 if (typeof clearer === "number") clearer = requirePlayer(clearer);
                 if (typeof bounty === "number") bounty = getBounty(bounty);
-                if (!bounty) return "no bounty found";
-                if (clearer.gold < bounty.clearCost) return "not enough gold";
+                if (!bounty) return __.core.err.bounty_not_found;
+                if (clearer.gold < bounty.clearCost) return __.core.err.not_enough_gold;
 
                 const player = stores.players.update(clearer.id.toString(), (prev) => ({
                     gold: prev.gold - bounty.clearCost
@@ -844,7 +845,7 @@ namespace BCB {
                 if (typeof placer === "number") placer = requirePlayer(placer);
                 const bounty = requireBounty(targetId);
 
-                if (placer.gold < gold) return "not enough gold";
+                if (placer.gold < gold) return __.core.err.not_enough_gold;
                 const player = stores.players.update(placer.id.toString(), (prev) => ({
                     gold: prev.gold - gold,
                 }));
@@ -890,7 +891,7 @@ namespace BCB {
             ranks,
             rankUp: (player: number | Player, newRank: Rank) => {
                 if (typeof player === "number") player = requirePlayer(player);
-                if (player.gold < newRank.cost) return "not enough gold";
+                if (player.gold < newRank.cost) return __.core.err.not_enough_gold;
                 return stores.players.update(player.id.toString(), (prev) => ({
                     gold: prev.gold - newRank.cost,
                     rank: newRank.level,
@@ -908,7 +909,7 @@ namespace BCB {
             //#region favor ops
             purchaseFavor: (player: number | Player, favor: Favor) => {
                 if (typeof player === "number") player = requirePlayer(player);
-                if (player.gold < favor.cost) return withReason("not enough gold");
+                if (player.gold < favor.cost) return withReason(__.core.err.not_enough_gold);
                 return stores.players.update(player.id.toString(), (prev) => ({
                     gold: prev.gold - favor.cost,
                     inventory: {
@@ -981,7 +982,8 @@ export class BountyRoom extends MixedMapRoomClass {
                         //#region help
                         help: {
                             getHelpText: (ctx, cmds) => {
-                                const cmdToText = (cmd: typeof cmds[number]) => `${ctx.cmd.prefix}${cmd.name} ${cmd.desc}`;
+                                const cmdToText = (cmd: typeof cmds[number]) =>
+                                    __.cmd.help.cmd_to_text(ctx.cmd.prefix, cmd.name, cmd.desc);
 
                                 const texts: string[] = [];
                                 if (ctx.roles.length) {
@@ -996,14 +998,14 @@ export class BountyRoom extends MixedMapRoomClass {
                                         }, {});
                                     Object.entries(privilegedCmds).forEach(([role, cmds]) =>
                                         texts.push(
-                                            `=== ${role} Commands`,
+                                            __.cmd.help.role_commands_title(role),
                                             ...cmds.map(cmdToText),
                                         )
                                     );
-                                    texts.push("=== Public Commands");                                    
+                                    texts.push(__.cmd.help.public_commands_title);
                                 }
                                 return [
-                                    `(📋 Bounty System Commands:`,
+                                    __.cmd.help.title,
                                     ...texts,
                                     ...cmds.filter(c => !c.roles.size).map(cmdToText),
                                 ];
@@ -1082,7 +1084,7 @@ export class BountyRoom extends MixedMapRoomClass {
         if ((!bounty || !bounty.reasons.find(r => r.desc === "Room Hop"))) {
             this._conn.SendMessage(
                 "Whisper",
-                `(⚠️ A bounty will be placed on you for room hopping if you don't stay for at least 10s.)`,
+                __.events.room_hop.warning,
                 char.MemberNumber
             );
         }
@@ -1096,7 +1098,7 @@ export class BountyRoom extends MixedMapRoomClass {
             if (bounty)
                 this._conn.SendMessage(
                     "Chat",
-                    `(⚠️ A ${this.#core.punishments["Room Hop"].gold} gold bounty has been placed on #${char.MemberNumber} for room hopping!)`
+                    __.events.room_hop.bounty(this.#core.punishments["Room Hop"].gold, char.MemberNumber),
                 );
         }
     }
@@ -1105,13 +1107,7 @@ export class BountyRoom extends MixedMapRoomClass {
     //#region prison
     /** @desc ~ prompts release/extend to prisoner, assumes player passed in exists */
     #promptPrisonRelease = ({ MemberNumber }: API_Character, prisoner: BCB.Prisoner) => {
-        this._conn.SendMessage(
-            "Whisper", [
-                `(Your imprisonment term has ended. Do you want to extend your term by 10min?`,
-                `Please respond with '/bot respond <yes/no>' within 10s, no response will be treated as no.`,
-            ].join("\n"),
-            MemberNumber,
-        );
+        this._conn.SendMessage("Whisper", __.events.prison.release.prompt, MemberNumber);
         this.#prison.flag(prisoner.id, "prompted");
         this.#pending.response.queue(MemberNumber, (ctx, expired = false) => {
             const player = this._conn.chatRoom?.getCharacter(MemberNumber) ?? null;
@@ -1121,7 +1117,7 @@ export class BountyRoom extends MixedMapRoomClass {
                 if (!res || !res.length || (res[0] !== "n" && res[0] !== "y"))
                     return player && this._conn.SendMessage(
                         "Whisper",
-                        `(Unknown response, please respond with 'yes' or 'no'.)`,
+                        __.events.prison.release.unknown_response,
                         MemberNumber,
                     );
                 release = res[0] === 'n';
@@ -1129,7 +1125,7 @@ export class BountyRoom extends MixedMapRoomClass {
             if (!release) {
                 if (player) this._conn.SendMessage(
                     "Whisper",
-                    `(Your imprisonment term will be extended by 10min, enjoy!)`,
+                    __.events.prison.release.extended,
                     MemberNumber,
                 );
                 return this.#prison.extend(prisoner.id, 10 * 60);
@@ -1144,11 +1140,7 @@ export class BountyRoom extends MixedMapRoomClass {
     /** @desc ~ releases prisoner, assumes player passed in exists */
     #releasePrisoner = (player: API_Character) => {
         if (!this.#prison.release(player)) return;
-        this._conn.SendMessage(
-            "Whisper",
-            `(You have been released from your imprisonment term.)`,
-            player.MemberNumber,
-        );
+        this._conn.SendMessage("Whisper", __.events.prison.release.completed, player.MemberNumber);
     }
 
     /** @desc ~ a sanity check for prisoner state, if not in assigned cell, just sync state, forcing an assumed release */
@@ -1212,29 +1204,25 @@ export class BountyRoom extends MixedMapRoomClass {
         //#region bounty manager
         // !putbounty (id) (gold)
         this._cmd.register({
-            name: "putbounty",
-            desc: "(id) (gold) — put a bounty at no cost [at least 20 gold]",
+            name: __.cmd.put_bounty.name, desc: __.cmd.put_bounty.desc,
             roles: [this.#roles.BountyManager],
             callback: (ctx) => {
                 const [strId, strBountyGold] = ctx.cmd.args;
-                if (!strId || !isValidNumber(strId)) return ctx.reply(`(❌ Usage: !putbounty (id) (gold) ~ please provide a valid id)`);
-                if (!strBountyGold || !isValidNumber(strBountyGold)) return ctx.reply(`(❌ Usage: !putbounty (id) (gold) ~ please provide a valid gold amount)`);
+                if (!strId || !isValidNumber(strId)) return ctx.reply(__.cmd.put_bounty.err.invalid_id(ctx));
+                if (!strBountyGold || !isValidNumber(strBountyGold)) return ctx.reply(__.cmd.put_bounty.err.invalid_gold(ctx));
 
                 const id = parseInt(strId);
                 const bountyGold = parseInt(strBountyGold);
                 const canHaveBounty = this.#core.canHaveBounty(id);
-                if (!canHaveBounty) return ctx.reply(`(❌ Usage: !putbounty (id) (gold) ~ #${id} ${canHaveBounty.reason}!)`);
-                if (bountyGold < 20) return ctx.reply(`(❌ Usage: !putbounty (id) (gold) ~ gold amount must be at least 20!)`);
+                if (!canHaveBounty) return ctx.reply(__.cmd.put_bounty.err.bounty_immunity(ctx, id, canHaveBounty.reason));
+                if (bountyGold < 20) return ctx.reply(__.cmd.put_bounty.err.need_min_gold(ctx));
 
                 const result = this.#core.placeBounty(ctx.sender.MemberNumber, id);
                 if (typeof result === "string")
-                    return ctx.reply(`(⚠️ Failed to place bounty because: ${result})`);
-                ctx.reply(`(✅ Placed a ${bountyGold} gold bounty on #${id}.)`);
+                    return ctx.reply(__.cmd.put_bounty.err.failed(result));
+                ctx.reply(__.cmd.put_bounty.placed(bountyGold, id));
 
-                this._conn.SendMessage(
-                    "Chat",
-                    `(⚠️ A ${bountyGold} gold bounty has been placed on member #${id}!)`
-                );
+                this._conn.SendMessage("Chat", __.cmd.put_bounty.announce(bountyGold, id));
             }
         });
         //#endregion
@@ -1242,49 +1230,39 @@ export class BountyRoom extends MixedMapRoomClass {
         //#region gold manager
         // !givegold (id) (gold)
         this._cmd.register({
-            name: "givegold",
-            desc: "(id) (gold) — prints gold for target player",
+            name: __.cmd.give_gold.name, desc: __.cmd.give_gold.desc,
             roles: [this.#roles.GoldManager],
             callback: (ctx) => {
                 const [strId, strGold] = ctx.cmd.args;
-                if (!strId || !isValidNumber(strId)) return ctx.reply(`(❌ Usage: !givegold (id) (gold) ~ please provide a valid id)`);
-                if (!strGold || !isValidNumber(strGold)) return ctx.reply(`(❌ Usage: !givegold (id) (gold) ~ please provide a valid gold amount)`);
+                if (!strId || !isValidNumber(strId)) return ctx.reply(__.cmd.give_gold.err.invalid_id(ctx));
+                if (!strGold || !isValidNumber(strGold)) return ctx.reply(__.cmd.give_gold.err.invalid_gold(ctx));
 
                 const id = parseInt(strId);
                 const gold = parseInt(strGold);
-                if (gold <= 0) return ctx.reply(`(❌ Usage: !givegold (id) (gold) ~ gold amount cannot be negative or zero!)`)
+                if (gold <= 0) return ctx.reply(__.cmd.give_gold.err.neg_or_zero_gold(ctx))
 
                 const result = this.#core.giveGold(id, gold);
-                ctx.reply(`(✅ Gave ${gold} gold to #${id}. They now have ${result.gold} gold.)`);
-                this._conn.SendMessage(
-                    "Whisper",
-                    `(💰 You received ${gold} gold! You now have ${result.gold} gold.)`,
-                    id,
-                );
+                ctx.reply(__.cmd.give_gold.given(gold, id, result.gold));
+                this._conn.SendMessage("Whisper", __.cmd.give_gold.received(gold, result.gold), id);
             },
         });
 
         // !removegold (id) (gold)
         this._cmd.register({
-            name: "removegold",
-            desc: "(id) (gold) — confiscate gold from target player",
+            name: __.cmd.remove_gold.name, desc: __.cmd.remove_gold.desc,
             roles: [this.#roles.GoldManager],
             callback: (ctx) => {
                 const [strId, strGold] = ctx.cmd.args;
-                if (!strId || !isValidNumber(strId)) return ctx.reply(`(❌ Usage: !removegold (id) (gold) ~ please provide a valid id)`);
-                if (!strGold || !isValidNumber(strGold)) return ctx.reply(`(❌ Usage: !removegold (id) (gold) ~ please provide a valid gold amount)`);
+                if (!strId || !isValidNumber(strId)) return ctx.reply(__.cmd.remove_gold.err.invalid_id(ctx));
+                if (!strGold || !isValidNumber(strGold)) return ctx.reply(__.cmd.remove_gold.err.invalid_gold(ctx));
 
                 const id = parseInt(strId);
                 const gold = parseInt(strGold);
-                if (gold <= 0) return ctx.reply(`(❌ Usage: !removegold (id) (gold) ~ gold amount cannot be negative or zero!)`)
+                if (gold <= 0) return ctx.reply(__.cmd.remove_gold.err.neg_or_zero_gold(ctx))
 
                 const result = this.#core.giveGold(id, -gold);
-                ctx.reply(`(✅ Removed ${gold} gold from #${id}. They now have ${result.gold} gold.)`);
-                this._conn.SendMessage(
-                    "Whisper",
-                    `(💰 You have lost ${gold} gold! You now have ${result.gold} gold.)`,
-                    id,
-                );
+                ctx.reply(__.cmd.remove_gold.removed(gold, id, result.gold));
+                this._conn.SendMessage("Whisper", __.cmd.remove_gold.lost(gold, result.gold), id);
             },
         });
         //#endregion
@@ -1292,31 +1270,29 @@ export class BountyRoom extends MixedMapRoomClass {
         //#region super admin
         // !addadmin (id)
         this._cmd.register({
-            name: "addadmin",
-            desc: "(id) — adds member to admin list",
+            name: __.cmd.add_admin.name, desc: __.cmd.add_admin.desc,
             roles: [this.#roles.SuperAdmin],
             callback: (ctx) => {
                 const [strId] = ctx.cmd.args;
-                if (!strId || !isValidNumber(strId)) return ctx.reply(`(❌ Usage: !addadmin (id) ~ please provide a valid id)`);
+                if (!strId || !isValidNumber(strId)) return ctx.reply(__.cmd.add_admin.err.invalid_id(ctx));
                 const id = parseInt(strId)
-                if (this.#roles.lists.admin.has(id)) return ctx.reply(`(⚠️ #${id} is already in the admin list.)`);
+                if (this.#roles.lists.admin.has(id)) return ctx.reply(__.cmd.add_admin.err.already_added(id));
                 const list = this.#roles.lists.admin.add(id);
-                ctx.reply(`(✅ #${id} added to admin list. The list member count is now ${list.length}.)`)
+                ctx.reply(__.cmd.add_admin.added(id, list.length));
             },
         });
 
         // !removeadmin (id)
         this._cmd.register({
-            name: "removeadmin",
-            desc: "(id) — removes member from admin list",
+            name: __.cmd.remove_admin.name, desc: __.cmd.remove_admin.desc,
             roles: [this.#roles.SuperAdmin],
             callback: (ctx) => {
                 const [strId] = ctx.cmd.args;
-                if (!strId || !isValidNumber(strId)) return ctx.reply(`(❌ Usage: !removeadmin (id) ~ please provide a valid id)`);
+                if (!strId || !isValidNumber(strId)) return ctx.reply(__.cmd.remove_admin.err.invalid_id(ctx));
                 const id = parseInt(strId)
-                if (!this.#roles.lists.admin.has(id)) return ctx.reply(`(⚠️ #${id} is not in the admin list.)`);
+                if (!this.#roles.lists.admin.has(id)) return ctx.reply(__.cmd.remove_admin.err.not_in_list(id));
                 const list = this.#roles.lists.admin.remove(id);
-                ctx.reply(`(✅ #${id} added to admin list. The list member count is now ${list.length}.)`)
+                ctx.reply(__.cmd.remove_admin.removed(id, list.length));
             },
         });
         //#endregion
@@ -1325,31 +1301,29 @@ export class BountyRoom extends MixedMapRoomClass {
         //#region immunity list
         // !addimmune (id)
         this._cmd.register({
-            name: "addimmune",
-            desc: "(id) — adds member to immune list",
+            name: __.cmd.add_immune.name, desc: __.cmd.add_immune.desc,
             roles: [this.#roles.Admin],
             callback: (ctx) => {
                 const [strId] = ctx.cmd.args;
-                if (!strId || !isValidNumber(strId)) return ctx.reply(`(❌ Usage: !addimmune (id) ~ please provide a valid id)`);
+                if (!strId || !isValidNumber(strId)) return ctx.reply(__.cmd.add_immune.err.invalid_id(ctx));
                 const id = parseInt(strId)
-                if (this.#roles.lists.immunity.has(id)) return ctx.reply(`(⚠️ #${id} is already in the immunity list.)`);
+                if (this.#roles.lists.immunity.has(id)) return ctx.reply(__.cmd.add_immune.err.already_added(id));
                 const list = this.#roles.lists.immunity.add(id);
-                ctx.reply(`(✅ #${id} added to immunity list. The list member count is now ${list.length}.)`)
+                ctx.reply(__.cmd.add_immune.added(id, list.length));
             },
         });
 
         // !removeimmune (id)
         this._cmd.register({
-            name: "removeimmune",
-            desc: "(id) — removes member from immune list",
+            name: __.cmd.remove_immune.name, desc: __.cmd.remove_immune.desc,
             roles: [this.#roles.Admin],
             callback: (ctx) => {
                 const [strId] = ctx.cmd.args;
-                if (!strId || !isValidNumber(strId)) return ctx.reply(`(❌ Usage: !removeimmune (id) ~ please provide a valid id)`);
+                if (!strId || !isValidNumber(strId)) return ctx.reply(__.cmd.remove_immune.err.invalid_id(ctx));
                 const id = parseInt(strId)
-                if (!this.#roles.lists.immunity.has(id)) return ctx.reply(`(⚠️ #${id} is not in the immunity list.)`);
+                if (!this.#roles.lists.immunity.has(id)) return ctx.reply(__.cmd.remove_immune.err.not_in_list(id));
                 const list = this.#roles.lists.immunity.remove(id);
-                ctx.reply(`(✅ #${id} added to immunity list. The list member count is now ${list.length}.)`)
+                ctx.reply(__.cmd.remove_immune.removed(id, list.length));
             },
         });
         //#endregion
@@ -1357,31 +1331,29 @@ export class BountyRoom extends MixedMapRoomClass {
         //#region dom list
         // !adddom (id)
         this._cmd.register({
-            name: "adddom",
-            desc: "(id) — adds member to dom list",
+            name: __.cmd.add_dom.name, desc: __.cmd.add_dom.desc,
             roles: [this.#roles.Admin],
             callback: (ctx) => {
                 const [strId] = ctx.cmd.args;
-                if (!strId || !isValidNumber(strId)) return ctx.reply(`(❌ Usage: !adddom (id) ~ please provide a valid id)`);
+                if (!strId || !isValidNumber(strId)) return ctx.reply(__.cmd.add_dom.err.invalid_id(ctx));
                 const id = parseInt(strId)
-                if (this.#roles.lists.dom.has(id)) return ctx.reply(`(⚠️ #${id} is already in the dom list.)`);
+                if (this.#roles.lists.dom.has(id)) return ctx.reply(__.cmd.add_dom.err.already_added(id));
                 const list = this.#roles.lists.dom.add(id);
-                ctx.reply(`(✅ #${id} added to dom list. The list member count is now ${list.length}.)`)
+                ctx.reply(__.cmd.add_dom.added(id, list.length));
             },
         });
 
         // !removedom (id)
         this._cmd.register({
-            name: "removedom",
-            desc: "(id) — removes member from dom list",
+            name: __.cmd.remove_dom.name, desc: __.cmd.remove_dom.desc,
             roles: [this.#roles.Admin],
             callback: (ctx) => {
                 const [strId] = ctx.cmd.args;
-                if (!strId || !isValidNumber(strId)) return ctx.reply(`(❌ Usage: !removedom (id) ~ please provide a valid id)`);
+                if (!strId || !isValidNumber(strId)) return ctx.reply(__.cmd.remove_dom.err.invalid_id(ctx));
                 const id = parseInt(strId)
-                if (!this.#roles.lists.dom.has(id)) return ctx.reply(`(⚠️ #${id} is not in the dom list.)`);
+                if (!this.#roles.lists.dom.has(id)) return ctx.reply(__.cmd.remove_dom.err.not_in_list(id));
                 const list = this.#roles.lists.dom.remove(id);
-                ctx.reply(`(✅ #${id} added to dom list. The list member count is now ${list.length}.)`)
+                ctx.reply(__.cmd.remove_dom.removed(id, list.length));
             },
         });
         //#endregion
@@ -1389,76 +1361,67 @@ export class BountyRoom extends MixedMapRoomClass {
         //#region favors mgmt
         // !addfavor (price) (name)
         this._cmd.register({
-            name: "addfavor",
-            desc: "(price) (name) — adds favor to store [please quote the name for spaces]",
+            name: __.cmd.add_favor.name, desc: __.cmd.add_favor.desc,
             roles: [this.#roles.Admin],
             callback: (ctx) => {
                 const [strPrice, favorName] = ctx.cmd.args;
-                if (!strPrice || !isValidNumber(strPrice))
-                    return ctx.reply(`(❌ Usage: !addfavor (price) (name) ~ please provide a valid price)`);
-                if (!favorName)
-                    return ctx.reply(`(❌ Usage: !addfavor (price) (name) ~ please provide a valid name)`);
+                if (!strPrice || !isValidNumber(strPrice)) return ctx.reply(__.cmd.add_favor.err.invalid_price(ctx));
+                if (!favorName) return ctx.reply(__.cmd.add_favor.err.invalid_name(ctx));
 
                 const price = parseInt(strPrice);
-                if (price <= 0)
-                    return ctx.reply(`(❌ Usage: !addfavor (price) (name) ~ price should have a value more than 0 gold)`);
+                if (price <= 0) return ctx.reply(__.cmd.add_favor.err.neg_or_zero_price(ctx));
 
                 this.#shop.favors.add({ cost: price, name: favorName });
-                ctx.reply(`(✅ Favor ${favorName} costing ${price} gold has been added to the store.)`);
+                ctx.reply(__.cmd.add_favor.added(favorName, price));
             },
         });
 
         // !removefavor (index)
         this._cmd.register({
-            name: "removefavor",
-            desc: "(index) — removes favor from store at specified index",
+            name: __.cmd.remove_favor.name, desc: __.cmd.remove_favor.desc,
             roles: [this.#roles.Admin],
             callback: (ctx) => {
                 const [strIndex] = ctx.cmd.args;
-                if (!strIndex || !isValidNumber(strIndex)) return ctx.reply(`(❌ Usage: !removefavor (index) ~ please provide a valid index)`);
+                if (!strIndex || !isValidNumber(strIndex)) return ctx.reply(__.cmd.remove_favor.err.invalid_index(ctx));
                 const index = parseInt(strIndex)
 
                 const favors = this.#shop.favors.list;
-                if (index < 1 || index > favors.length)
-                    return ctx.reply(`(❌ Usage: !removefavor (index) ~ ${index} index is not valid, check !displaystore)`);
+                if (index < 1 || index > favors.length) return ctx.reply(__.cmd.remove_favor.err.index_out_of_range(ctx));
 
                 const removed = this.#shop.favors.remove(index - 1);
-                if (!removed) return ctx.reply(`(❌ Failed to remove favor from store: ${removed.reason})`);
-                ctx.reply(`(✅ Favor ${removed.name} costing ${removed.cost} gold has been removed from the store.)`);
+                if (!removed) return ctx.reply(__.cmd.remove_favor.err.failed(removed.reason));
+                ctx.reply(__.cmd.remove_favor.removed(removed.name, removed.cost));
             },
         });
 
         // !removeOwed (index)
         this._cmd.register({
-            name: "removeOwed",
-            desc: "(index) — removes owed favor from owed list at specified index",
+            name: __.cmd.remove_owed.name, desc: __.cmd.remove_owed.desc,
             roles: [this.#roles.Admin],
             callback: (ctx) => {
                 const [strIndex] = ctx.cmd.args;
-                if (!strIndex || !isValidNumber(strIndex)) return ctx.reply(`(❌ Usage: !removeOwed (index) ~ please provide a valid index)`);
+                if (!strIndex || !isValidNumber(strIndex)) return ctx.reply(__.cmd.remove_owed.err.invalid_index(ctx));
                 const index = parseInt(strIndex)
 
                 const favors = this.#core.getOwedFavors();
-                if (index < 1 || index > favors.length)
-                    return ctx.reply(`(❌ Usage: !removeOwed (index) ~ ${index} index is not valid, check !displayOwed)`);
+                if (index < 1 || index > favors.length) return ctx.reply(__.cmd.remove_owed.err.index_out_of_range(ctx));
 
                 const { forId, forIndex, name } = favors[index - 1];
                 this.#core.resolveFavor(forId, forIndex);
-                ctx.reply(`(✅ Favor ${name} for #${forId} has been resolved.)`);
+                ctx.reply(__.cmd.remove_owed.resolved(name, forId));
             },
         });
 
         // !displayOwed
         this._cmd.register({
-            name: "displayOwed",
-            desc: "— displays the list of owed favors",
+            name: __.cmd.display_owed.name, desc: __.cmd.display_owed.desc,
             roles: [this.#roles.Admin],
             callback: (ctx) => {
                 const favors = this.#core.getOwedFavors();
                 ctx.reply(
-                    `(${favors.length} Owed Favors:`,
+                    __.cmd.display_owed.title(favors.length),
                     ...favors.map(({ index, forId, name }) =>
-                        `[${index + 1}]: ${name} owed to #${forId}`,
+                        __.cmd.display_owed.entry(index + 1, forId, name)
                     ),
                 );
             },
@@ -1469,17 +1432,16 @@ export class BountyRoom extends MixedMapRoomClass {
         //#region prison mgmt
         // !release (id)
         this._cmd.register({
-            name: "release",
-            desc: "(id) — force releases player from prison term",
+            name: __.cmd.release.name, desc: __.cmd.release.desc,
             roles: [this.#roles.Dom, this.#roles.Admin, this.#roles.SuperAdmin],
             callback: (ctx) => {
                 const [strId] = ctx.cmd.args;
-                if (!strId || !isValidNumber(strId)) return ctx.reply(`(❌ Usage: !release (id) ~ please provide a valid id)`);
+                if (!strId || !isValidNumber(strId)) return ctx.reply(__.cmd.release.err.invalid_id(ctx));
                 const id = parseInt(strId)
                 const prisoner = this.#prison.getPrisoner(id);
-                if (!prisoner) return ctx.reply(`(❌ #${id} isn't a prisoner in the system.)`);
+                if (!prisoner) return ctx.reply(__.cmd.release.err.not_prisoner(id));
                 const target = this._conn.chatRoom?.getCharacter(prisoner.id) ?? null;
-                if (!target) return ctx.reply(`(❌ Cannot release #${id} when they aren't here.)`);
+                if (!target) return ctx.reply(__.cmd.release.err.not_present(id));
                 this.#releasePrisoner(target);
             },
         });
@@ -1488,22 +1450,20 @@ export class BountyRoom extends MixedMapRoomClass {
         //#region misc
         // !confirm
         this._cmd.register({
-            name: "confirm",
-            desc: "— confirm a pending action",
+            name: __.cmd.confirm.name, desc: __.cmd.confirm.desc,
             callback: (ctx) => {
                 const pending = this.#pending.confirm.get(ctx.sender.MemberNumber);
-                if (!pending) return ctx.reply('(❌ Nothing to confirm.)');
+                if (!pending) return ctx.reply(__.cmd.confirm.err.no_action);
                 pending.run(ctx);
             }
         });
 
         // !respond (response)
         this._cmd.register({
-            name: "respond",
-            desc: "(response) — respond to a prompt",
+            name: __.cmd.respond.name, desc: __.cmd.respond.desc,
             callback: (ctx) => {
                 const pending = this.#pending.response.get(ctx.sender.MemberNumber);
-                if (!pending) return ctx.reply(`(❌ Nothing to respond to.)`);
+                if (!pending) return ctx.reply(__.cmd.respond.err.no_prompt);
                 pending.run(ctx);
             },
         })
@@ -1512,76 +1472,70 @@ export class BountyRoom extends MixedMapRoomClass {
         //#region profile ops
         // !gold
         this._cmd.register({
-            name: "gold",
-            desc: "— check your gold and rank",
+            name: __.cmd.gold.name, desc: __.cmd.gold.desc,
             callback: (ctx) => {
                 const player = this.#core.requirePlayer(ctx.sender.MemberNumber);
-                ctx.reply(`(💰 Gold: ${player.gold} | Rank: ${player.rank} (${player.rank.name})`);
+                ctx.reply(__.cmd.gold.stat(player.gold, player.rank.level, player.rank.name));
             },
         });
 
         // !favors
         this._cmd.register({
-            name: "favors",
-            desc: "— shows the list of bought favors you are owed",
+            name: __.cmd.favors.name, desc: __.cmd.favors.desc,
             callback: (ctx) => {
                 const favors = this.#core.getOwedFavors(ctx.sender.MemberNumber);
                 ctx.reply(
-                    `(${favors.length} Owed Favors:`,
-                    ...favors.map(({ name }) =>
-                        `- ${name}`,
-                    ),
+                    __.cmd.favors.title(favors.length),
+                    ...favors.map(({ name }) => __.cmd.favors.entry(name)),
                 );
             },
         });
 
         // !rankup
         this._cmd.register({
-            name: "rankup",
-            desc: "— see next rank cost",
+            name: __.cmd.rankup.name, desc: __.cmd.rankup.desc,
             callback: (ctx) => {
                 const player = this.#core.requirePlayer(ctx.sender.MemberNumber);
                 if (player.rank.level >= this.#core.ranks.length - 1)
-                    return ctx.reply(`(🏆 You are already at max rank: ${player.rank.name}!)`);
+                    return ctx.reply(__.cmd.rankup.at_max_rank(player.rank.name));
 
                 const nextRank = this.#core.ranks[player.rank.level + 1];
-                ctx.reply([
-                    `(📊 Current rank: ${player.rank.name} (${player.rank.level}/${this.#core.ranks.length - 1})`,
-                    `Next rank: ${nextRank.name} — costs ${nextRank.cost} gold`,
-                    `You have ${player.gold} gold.`,
-                    `Type !purchaserankup to buy it.`
-                ].join("\n"));
+                ctx.reply(__.cmd.rankup.info(
+                    player.rank.name, player.rank.level,
+                    this.#core.ranks.length - 1,
+                    nextRank.name, nextRank.cost,
+                    player.gold
+                ));
             }
         });
 
         // !purchaserankup
         this._cmd.register({
-            name: "purchaserankup",
-            desc: "— buy next rank",
+            name: __.cmd.purchase_rankup.name, desc: __.cmd.purchase_rankup.desc,
             callback: (ctx) => {
                 const player = this.#core.requirePlayer(ctx.sender.MemberNumber);
                 if (player.rank.level >= this.#core.ranks.length - 1)
-                    return ctx.reply(`(🏆 You are already at max rank!)`);
+                    return ctx.reply(__.cmd.purchase_rankup.at_max_rank);
 
                 const nextRank = this.#core.ranks[player.rank.level + 1];
                 if (player.gold < nextRank.cost)
-                    return ctx.reply(`(❌ Not enough gold! ${nextRank.name} costs ${nextRank.cost} gold. You have ${player.gold}.)`);
+                    return ctx.reply(__.cmd.purchase_rankup.err.not_enough_gold(nextRank.name, nextRank.cost, player.gold));
 
                 const originalInfo = { player };
-                ctx.reply(`(⚠️ Rank up to ${nextRank.name} costs ${nextRank.cost} gold. You have ${player.gold}. Type !confirm to purchase.`);
+                ctx.reply(__.cmd.purchase_rankup.prompt(nextRank.name, nextRank.cost, player.gold));
                 this.#pending.confirm.queue(ctx.sender.MemberNumber, (ctx) => {
                     const player = this.#core.requirePlayer(ctx.sender.MemberNumber);
                     if (player.gold !== originalInfo.player.gold)
-                        return ctx.reply(`(⚠️ Your gold has changed. Please redo !purchaserankup again to confirm the changes.)`);
+                        return ctx.reply(__.cmd.purchase_rankup.err.mismatch);
 
                     const result = this.#core.rankUp(player, nextRank);
                     if (typeof result === "string")
-                        return ctx.reply(`(⚠️ Failed to rank up because: ${result})`);
-                    ctx.reply(`(🏆 Rank up! You are now a ${nextRank.name}! Remaining gold: ${result.gold}.)`);
+                        return ctx.reply(__.cmd.purchase_rankup.err.failed(result));
+                    ctx.reply(__.cmd.purchase_rankup.success(nextRank.name, result.gold));
 
                     this._conn.SendMessage(
                         "Chat",
-                        `(🏆 ${parseApiCharObj(ctx.sender).name} has ranked up to ${nextRank.name}!)`
+                        __.cmd.purchase_rankup.announce(parseApiCharObj(ctx.sender).name, nextRank.name),
                     );
                 });
             }
@@ -1591,14 +1545,13 @@ export class BountyRoom extends MixedMapRoomClass {
         //#region favor store
         // !displaystore
         this._cmd.register({
-            name: "displaystore",
-            desc: "— displays the list of favors for sale",
+            name: __.cmd.display_store.name, desc: __.cmd.display_store.desc,
             callback: (ctx) => {
                 const favors = this.#shop.favors.list;
                 ctx.reply(
-                    `(${favors.length} Store Favors:`,
+                    __.cmd.display_store.title(favors.length),
                     ...favors.map(({ cost, name }, index) =>
-                        `[${index + 1}]: ${name} (${cost} gold)`,
+                        __.cmd.display_store.entry(index + 1, name, cost),
                     ),
                 );
             },
@@ -1606,21 +1559,20 @@ export class BountyRoom extends MixedMapRoomClass {
 
         // !buy (index)
         this._cmd.register({
-            name: "buy",
-            desc: "(index) — buys the favor at the specified index in the store",
+            name: __.cmd.buy.name, desc: __.cmd.buy.desc,
             callback: (ctx) => {
                 const [strIndex] = ctx.cmd.args;
-                if (!strIndex || !isValidNumber(strIndex)) return ctx.reply(`(❌ Usage: !buy (index) ~ please provide a valid index)`);
+                if (!strIndex || !isValidNumber(strIndex)) return ctx.reply(__.cmd.buy.err.invalid_index(ctx));
                 const index = parseInt(strIndex)
 
                 const favors = this.#shop.favors.list;
                 if (index < 1 || index > favors.length)
-                    return ctx.reply(`(❌ Usage: !buy (index) ~ ${index} index is not valid, check !displaystore)`);
+                    return ctx.reply(__.cmd.buy.err.index_out_of_range(ctx));
 
                 const favor = favors[index - 1];
                 const purchased = this.#core.purchaseFavor(ctx.sender.MemberNumber, favor);
-                if (!purchased) return ctx.reply(`(❌ Failed to buy favor from store: ${purchased.reason})`);
-                ctx.reply(`(✅ Favor ${favor.name} has been bought.)`);
+                if (!purchased) return ctx.reply(__.cmd.buy.err.failed(purchased.reason));
+                ctx.reply(__.cmd.buy.bought(favor.name));
             },
         });
         //#endregion
@@ -1628,24 +1580,24 @@ export class BountyRoom extends MixedMapRoomClass {
         //#region bounty ops
         // !bounty (id)
         this._cmd.register({
-            name: "bounty",
-            desc: "(id) — check a bounty",
+            name: __.cmd.bounty.name, desc: __.cmd.bounty.desc,
             callback: (ctx) => {
-                const [id] = ctx.cmd.args;
-                if (!id || !isValidNumber(id)) return ctx.reply(`(❌ Usage: !bounty (id) ~ please provide a valid id)`);
-                const bounty = this.#core.getBounty(parseInt(id));
-                if (!bounty) return ctx.reply(`(✅ #${id} has no bounty.)`);
-                ctx.reply(`(⚠️ #${id} has a bounty of ${id} gold.)`);
+                const [strId] = ctx.cmd.args;
+                if (!strId || !isValidNumber(strId)) return ctx.reply(__.cmd.bounty.err.invalid_id(ctx));
+
+                const id = parseInt(strId);
+                const bounty = this.#core.getBounty(id);
+                if (!bounty) return ctx.reply(__.cmd.bounty.no_bounty(id));
+                ctx.reply(__.cmd.bounty.bounty(id, bounty.gold));
             },
         });
 
         // !claimbounty
         this._cmd.register({
-            name: "claimbounty",
-            desc: "— capture a wanted target (stand at claim zone)",
+            name: __.cmd.claim_bounty.name, desc: __.cmd.claim_bounty.desc,
             callback: (ctx) => {
                 if (!ctx.sender.MapPos) return;
-                if (!this.#common.areas.Claim.covers(ctx.sender.MapPos)) return ctx.reply(`(❌ You need to stand at the bounty claim area to use this.)`);
+                if (!this.#common.areas.Claim.covers(ctx.sender.MapPos)) return ctx.reply(__.cmd.claim_bounty.err.not_in_zone);
 
                 const players = (this._conn.chatRoom?.characters ?? []).filter(p => p.MapPos);
                 const target = players.find(c =>
@@ -1653,15 +1605,15 @@ export class BountyRoom extends MixedMapRoomClass {
                     this.#core.getBounty(c.MemberNumber) &&
                     this.#common.areas.BountyTarget.covers(c.MapPos)
                 );
-                if (!target) return ctx.reply(`(❌ No wanted targets found in the capture zone.)`);
+                if (!target) return ctx.reply(__.cmd.claim_bounty.err.no_targets);
 
                 const bounty = this.#core.getBounty(target.MemberNumber);
-                if (!bounty) return ctx.reply(`(❌ Target in capture zone somehow has no bounty.)`);
+                if (!bounty) return ctx.reply(__.cmd.claim_bounty.err.no_bounty);
 
                 const cells = this.#prison.cells.free.filter(tile =>
                     !players.some(({ MapPos: { X, Y } }) => tile.X === X && tile.Y === Y )
                 );
-                if (!cells.length) return ctx.reply("(❌ All prison cells are full! Try again later.)");
+                if (!cells.length) return ctx.reply(__.cmd.claim_bounty.err.prison_full);
 
                 const targetMeta = parseApiCharObj(target);
                 const prisoner = this.#prison.admit({
@@ -1672,95 +1624,87 @@ export class BountyRoom extends MixedMapRoomClass {
                     cell: pickRandom(cells),
                 });
                 if (typeof prisoner === "string")
-                    return ctx.reply(`(❌ Could not admit prisoner: ${prisoner})`);
+                    return ctx.reply(__.cmd.claim_bounty.err.admit_failed(prisoner));
 
                 const claimer = this.#core.claimBounty(ctx.sender.MemberNumber, bounty);
-                if (!claimer) return ctx.reply("(❌ Internal error occured while claiming! Try again later.)");
-                ctx.reply(`(✅ You have successfully collected the bounty! +${bounty.gold} gold. Total: ${claimer.gold} gold.)`)
+                if (!claimer) return ctx.reply(__.cmd.claim_bounty.err.internal_error);
+                ctx.reply(__.cmd.claim_bounty.collected(bounty.gold, claimer.gold));
                 this._conn.SendMessage(
                     "Whisper",
-                    `(🔒 Someone has collected your bounty! You have been taken to prison for a term of ${this.#util.time.formatSecs(prisoner.end.duration)}.)`,
+                    __.cmd.claim_bounty.been_collected(this.#util.time.formatSecs(prisoner.end.duration)),
                     target.MemberNumber
                 );
 
                 this._conn.SendMessage(
                     "Chat",
-                    `(⚡ ${parseApiCharObj(ctx.sender).name} has claimed a bounty on ${targetMeta.name}!)`
+                    __.cmd.claim_bounty.announce(parseApiCharObj(ctx.sender).name, targetMeta.name),
                 );
             },
         });
 
         // !clearbounty (id)
         this._cmd.register({
-            name: "clearbounty",
-            desc: "(id) — pay to clear a bounty (stand at claim zone)",
+            name: __.cmd.clear_bounty.name, desc: __.cmd.clear_bounty.desc,
             callback: (ctx) => {
                 if (!ctx.sender.MapPos) return;
-                if (!this.#common.areas.Shop.covers(ctx.sender.MapPos)) return ctx.reply(`(❌ You need to stand at the bounty area to use this.)`);
+                if (!this.#common.areas.Shop.covers(ctx.sender.MapPos)) return ctx.reply(__.cmd.clear_bounty.err.not_in_area);
 
-                const [id] = ctx.cmd.args;
-                if (!id || !isValidNumber(id)) return ctx.reply(`(❌ Usage: !clearbounty (id) ~ please provide a valid id)`);
+                const [strId] = ctx.cmd.args;
+                if (!strId || !isValidNumber(strId)) return ctx.reply(__.cmd.clear_bounty.err.invalid_id(ctx));
 
-                const bounty = this.#core.getBounty(parseInt(id));
-                if (!bounty) return ctx.reply(`(❌ #${id} has no bounty.)`);
+                const id = parseInt(strId);
+                const bounty = this.#core.getBounty(id);
+                if (!bounty) return ctx.reply(__.cmd.clear_bounty.err.no_bounty(id));
 
                 const player = this.#core.requirePlayer(ctx.sender.MemberNumber);
-                const infoPrefix = `⚠️ #${id} has a bounty of ${bounty.gold} gold. Clearing it costs ${bounty.clearCost} gold (1.5x).`;
+                const infoPrefix = __.cmd.clear_bounty.info_prefix(id, bounty.gold, bounty.clearCost);
                 if (player.gold < bounty.clearCost)
-                    return ctx.reply(`(${infoPrefix} You only have ${player.gold} gold.)`);
+                    return ctx.reply(__.cmd.clear_bounty.err.not_enough_gold(infoPrefix, player.gold));
                 
                 const originalInfo = { player, bounty };
-                ctx.reply(`(${infoPrefix} You have ${player.gold} gold. Type !confirm to proceed.`);
+                ctx.reply(__.cmd.clear_bounty.prompt(infoPrefix, player.gold));
                 this.#pending.confirm.queue(ctx.sender.MemberNumber, (ctx) => {
-                    const bounty = this.#core.getBounty(parseInt(id));
+                    const bounty = this.#core.getBounty(id);
                     const player = this.#core.requirePlayer(ctx.sender.MemberNumber);
                     if (player.gold !== originalInfo.player.gold || !bounty || bounty.gold !== originalInfo.bounty.gold)
-                        return ctx.reply(`(⚠️ Either #${id}'s bounty has changed or your gold has changed. Please redo !clearbounty again to confirm the changes.)`);
+                        return ctx.reply(__.cmd.clear_bounty.err.mismatch(id));
 
                     const result = this.#core.clearBounty(player, bounty);
                     if (typeof result === "string")
-                        return ctx.reply(`(⚠️ Failed to clear bounty because: ${result})`);
-                    ctx.reply(`(✅ Bounty on #${id} cleared! You paid ${bounty.clearCost} gold. Remaining gold: ${result.gold}.)`);
+                        return ctx.reply(__.cmd.clear_bounty.err.failed(result));
+                    ctx.reply(__.cmd.clear_bounty.cleared(id, bounty.clearCost, result.gold));
 
-                    this._conn.SendMessage(
-                        "Whisper",
-                        `(🎉 Your bounty has been cleared by someone!)`,
-                        parseInt(id),
-                    );
+                    this._conn.SendMessage("Whisper", __.cmd.clear_bounty.been_cleared, id);
                 });
             },
         });
 
         // !placebounty (id) (gold)
         this._cmd.register({
-            name: "placebounty",
-            desc: "(id) (gold) — place a bounty [stand at claim zone, at least 20 gold]",
+            name: __.cmd.place_bounty.name, desc: __.cmd.place_bounty.desc,
             callback: (ctx) => {
                 if (!ctx.sender.MapPos) return;
-                if (!this.#common.areas.Shop.covers(ctx.sender.MapPos)) return ctx.reply(`(❌ You need to stand at the bounty area to use this.)`);
+                if (!this.#common.areas.Shop.covers(ctx.sender.MapPos)) return ctx.reply(__.cmd.place_bounty.err.not_in_area);
 
                 const [strId, strBountyGold] = ctx.cmd.args;
-                if (!strId || !isValidNumber(strId)) return ctx.reply(`(❌ Usage: !placebounty (id) (gold) ~ please provide a valid id)`);
-                if (!strBountyGold || !isValidNumber(strBountyGold)) return ctx.reply(`(❌ Usage: !placebounty (id) (gold) ~ please provide a valid gold amount)`);
+                if (!strId || !isValidNumber(strId)) return ctx.reply(__.cmd.place_bounty.err.invalid_id(ctx));
+                if (!strBountyGold || !isValidNumber(strBountyGold)) return ctx.reply(__.cmd.place_bounty.err.invalid_gold(ctx));
 
                 const id = parseInt(strId);
                 const bountyGold = parseInt(strBountyGold);
                 const canHaveBounty = this.#core.canHaveBounty(id);
-                if (!canHaveBounty) return ctx.reply(`(❌ Usage: !placebounty (id) (gold) ~ #${id} ${canHaveBounty.reason}!)`);
-                if (bountyGold < 20) return ctx.reply(`(❌ Usage: !placebounty (id) (gold) ~ gold amount must be at least 20!)`)
+                if (!canHaveBounty) return ctx.reply(__.cmd.place_bounty.err.bounty_immunity(ctx, id, canHaveBounty.reason));
+                if (bountyGold < 20) return ctx.reply(__.cmd.place_bounty.err.need_min_gold(ctx))
 
                 const player = this.#core.requirePlayer(ctx.sender.MemberNumber);
-                if (player.gold < bountyGold) return ctx.reply(`(❌ Not enough gold! You have ${player.gold} gold.)`);
+                if (player.gold < bountyGold) return ctx.reply(__.cmd.place_bounty.err.not_enough_gold(player.gold));
 
                 const result = this.#core.placeBounty(player, id, bountyGold);
                 if (typeof result === "string")
-                    return ctx.reply(`(⚠️ Failed to place bounty because: ${result})`);
-                ctx.reply(`(✅ Placed a ${bountyGold} gold bounty on #${id}. Your gold: ${result.gold}.)`);
+                    return ctx.reply(__.cmd.place_bounty.err.failed(result));
+                ctx.reply(__.cmd.place_bounty.placed(bountyGold, id, result.gold));
 
-                this._conn.SendMessage(
-                    "Chat",
-                    `(⚠️ A ${bountyGold} gold bounty has been placed on member #${id}!)`
-                );
+                this._conn.SendMessage("Chat", __.cmd.place_bounty.announce(bountyGold, id));
             }
         });
         //#endregion
