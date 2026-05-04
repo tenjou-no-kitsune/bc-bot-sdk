@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { truncate } from "./common";
+import { obj as _obj } from "./common";
 
 type ObjStoreOptions<T extends object> = {
     name: string,
@@ -16,25 +17,6 @@ type ObjStoreOptions<T extends object> = {
 };
 
 type ObjStore<T extends object> = ReturnType<typeof ObjStore.create<T>>;
-
-export const deepMerge = <T extends object>(src: T, dst: T): number => {
-    let foundMissing = 0;
-    for (const [k, v] of Object.entries(src)) {
-        const isObj = typeof v === "object" && !Array.isArray(v);
-        if (k in dst) {
-            if (isObj) foundMissing += deepMerge(v, (dst as never)[k]);
-            continue;
-        }
-        foundMissing++;
-        if (isObj) {
-            (dst as Record<string, unknown>)[k] = {};
-            foundMissing += deepMerge(v, (dst as never)[k]);
-            continue;
-        }
-        (dst as Record<string, unknown>)[k] = v;
-    }
-    return foundMissing;
-};
 
 const ObjStore = {
     create: <T extends object>({
@@ -118,7 +100,7 @@ const ObjStore = {
                 writeObj(data.default);
             }
             const obj = readObj();
-            const numMissingProperties = deepMerge(data.default, obj);
+            const numMissingProperties =_obj.deep.fill(data.default, obj);
             if (numMissingProperties) {
                 console.info(prefix, "FUNC(create):", `found ${numMissingProperties} missing keys, updating missing keys with defaults`);
                 writeObj(obj);

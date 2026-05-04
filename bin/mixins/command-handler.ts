@@ -4,8 +4,7 @@ import {
     API_Message
 // @ts-ignore
 } from "bc-bot";
-import { DeepPartial, Satisfies } from "../utils";
-import { deepMerge } from "../utils/obj-store";
+import { DeepPartial, Satisfies, obj } from "../utils";
 
 //#region handler
 type CommandHandlerTexts = {
@@ -125,7 +124,7 @@ class CommandHandler {
 
         // @ts-expect-error ~ texts is a deep partial that will be populated
         this.#texts = this.#opts.texts;
-        deepMerge({
+        obj.deep.fill({
             help: {
                 name: "help",
                 desc: "shows the message listing available commands",

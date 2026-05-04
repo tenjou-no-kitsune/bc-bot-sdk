@@ -1,9 +1,8 @@
 //@ts-ignore
 import { API_Character, AssetGet } from "bc-bot";
 import { CommandContext, WithCommands } from "../mixins";
-import { DeepPartial, ObjStore, as, isValidNumber, map, parseApiCharObj, pickRandom, withReason } from "../utils";
+import { DeepPartial, ObjStore, obj, isValidNumber, map, parseApiCharObj, pickRandom, withReason } from "../utils";
 import { GenericMapRoomOptions, MapRoom, MapRoomArguments } from "./map-room";
-import { deepMerge } from "../utils/obj-store";
 import { __ } from "../features/bounty";
 
 //#region "Vendored" Variables
@@ -137,7 +136,7 @@ namespace BCB {
                         },
                         update(key: string, dispatcher: (prev: T) => DeepPartial<T>) {
                             const diff = dispatcher(data[key]);
-                            if (key in data) deepMerge(diff, data[key] as DeepPartial<T>);
+                            if (key in data) obj.deep.fill(diff, data[key] as DeepPartial<T>);
                             else data[key] = diff as T;
                             queueUpdate();
                             return data[key];
