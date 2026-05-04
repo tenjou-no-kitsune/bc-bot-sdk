@@ -136,7 +136,7 @@ namespace BCB {
                         },
                         update(key: string, dispatcher: (prev: T) => DeepPartial<T>) {
                             const diff = dispatcher(data[key]);
-                            if (key in data) obj.deep.fill(diff, data[key] as DeepPartial<T>);
+                            if (key in data) obj.deep.apply(diff, data[key]);
                             else data[key] = diff as T;
                             queueUpdate();
                             return data[key];
