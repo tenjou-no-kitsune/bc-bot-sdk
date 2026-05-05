@@ -109,7 +109,7 @@ namespace Tmpl {
     >(tmpl: Cmd.Tmpl<N, P, D>, etcMaker: (tmpl: Cmd.ExtendedTmpl<N, P, D>) => Extras) => {
         type ExTmpl = Cmd.ExtendedTmpl<N, P, D>;
         
-        const desc = (tmpl.params ? `— ${tmpl.desc}` : `${tmpl.params} — ${tmpl.desc}`) as ExTmpl["desc"];
+        const desc = (tmpl.params ? `${tmpl.params} — ${tmpl.desc}` : `— ${tmpl.desc}`) as ExTmpl["desc"];
         const sig = (tmpl.params ? `${tmpl.name} ${tmpl.params}` : tmpl.name) as ExTmpl["sig"];
         const tmpl_err = <Str extends string>(ctx: CommandContext, err: Str) =>
             _e(`Usage: ${ctx.cmd.prefix}${sig} ~ ${err}`);
