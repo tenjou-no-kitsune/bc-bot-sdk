@@ -105,6 +105,7 @@ interface ConnectorEvents {
         intentional: boolean,
     ];
     RoomUpdate: [obj: ServerChatRoomSyncPropertiesMessage];
+    CharacterMapUpdate: [character: API_Character];
 }
 
 export class API_Connector extends EventEmitter<ConnectorEvents> {
@@ -559,6 +560,8 @@ export class API_Connector extends EventEmitter<ConnectorEvents> {
     private onChatRoomSyncMapData = (update: ServerMapDataResponse) => {
         console.log("chat room map data", update);
         this._chatRoom?.mapPositionUpdate(update.MemberNumber, update.MapData);
+        const char = this._chatRoom?.getCharacter(update.MemberNumber);
+        if (char) this.emit("CharacterMapUpdate", char);
     };
 
     private ignoreMsgs = [
