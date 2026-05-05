@@ -200,7 +200,7 @@ class CommandHandler {
     };
 
     #processCmd(ctx: CommandContext): void {
-        ctx.cmd.args = ctx.cmd.raw.toLowerCase().split(" ");
+        ctx.cmd.args = ctx.cmd.raw.split(" ");
         if (this.#opts.showHelp && ctx.cmd.args.length === 1 && ctx.cmd.args[0].trim() === "") return this.#showHelp(ctx);
         let cmd = [];
 
