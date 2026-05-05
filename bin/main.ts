@@ -28,6 +28,10 @@ const createBot = async ({ name, account, room, mixins }: BotConfig): Promise<Bo
                         ban: room.options.defs.lists.ban,
                         whitelist: room.options.defs.lists.whitelist,
                     },
+                    privacy: {
+                        access: room.options.defs.privacy.access,
+                        visibility: room.options.defs.privacy.visibility,
+                    },
                 },
                 map: {
                     name: room.options.map.name,
@@ -47,6 +51,8 @@ const createBot = async ({ name, account, room, mixins }: BotConfig): Promise<Bo
     room.options.defs.lists.admin = loaded.defs.lists.admin;
     room.options.defs.lists.ban = loaded.defs.lists.ban;
     room.options.defs.lists.whitelist = loaded.defs.lists.whitelist;
+    room.options.defs.privacy.access = loaded.defs.privacy.access;
+    room.options.defs.privacy.visibility = loaded.defs.privacy.visibility;
     //#endregion
 
     const defn = room.definition as RoomDefinition;
@@ -56,6 +62,12 @@ const createBot = async ({ name, account, room, mixins }: BotConfig): Promise<Bo
     defn.Admin = room.options.defs.lists.admin;
     defn.Ban = room.options.defs.lists.ban;
     (defn as unknown as { Whitelist: number[] })["Whitelist"] = room.options.defs.lists.whitelist;
+
+    delete defn.Private;
+    delete defn.Locked;
+    defn.Access = room.options.defs.privacy.access;
+    defn.Visibility = room.options.defs.privacy.visibility;
+
     const connector = new API_Connector(SERVER_URL, account.username, account.password, "live");
     await connector.joinOrCreateRoom(defn);
 

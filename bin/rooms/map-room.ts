@@ -29,6 +29,10 @@ type RoomDefinitionOptions = {
         ban: number[],
         whitelist: number[],
     },
+    privacy: {
+        visibility: ServerChatRoomRole[],
+        access: ServerChatRoomRole[],
+    },
 }
 
 export type GenericMapRoomOptions<T = {}> = {
@@ -164,7 +168,11 @@ export class MapRoom {
         return false;
     }
 
-    #syncRoomDetails = ({ Name, Description, Background, Admin, Ban, Whitelist }: ServerChatRoomSyncPropertiesMessage) => {
+    #syncRoomDetails = ({
+        Name, Description, Background,
+        Admin, Ban, Whitelist,
+        Access, Visibility,
+    }: ServerChatRoomSyncPropertiesMessage) => {
         let hasChanges = false;
         if (Name !== this.#opts.map.name) {
             this.#opts.map.name = Name;
@@ -196,6 +204,16 @@ export class MapRoom {
             console.info("FUNC(#syncRoomDetails):", "updated with new room whitelist");
             hasChanges = true;
         }
+        if (!areArraysEqual(Access, this.#opts.defs.privacy.access)) {
+            this.#opts.defs.privacy.access = Access;
+            console.info("FUNC(#syncRoomDetails):", "updated with new room access");
+            hasChanges = true;
+        }
+        if (!areArraysEqual(Visibility, this.#opts.defs.privacy.visibility)) {
+            this.#opts.defs.privacy.visibility = Visibility;
+            console.info("FUNC(#syncRoomDetails):", "updated with new room visibility");
+            hasChanges = true;
+        }
         return hasChanges;
     }
 
@@ -208,6 +226,10 @@ export class MapRoom {
                     admin: defs.lists.admin,
                     ban: defs.lists.ban,
                     whitelist: defs.lists.whitelist,
+                },
+                privacy: {
+                    access: defs.privacy.access,
+                    visibility: defs.privacy.visibility
                 },
             },
             map: {
