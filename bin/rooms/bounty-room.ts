@@ -1168,6 +1168,7 @@ export class BountyRoom extends MixedMapRoomClass {
         this._conn.on("Message", this.#onGenericMsg);
         this._conn.on("CharacterEntered", this.#onCharEnter);
         this._conn.on("CharacterLeft", this.#onCharLeft);
+        this._conn.on("CharacterMapUpdate", this.#onCharMapUpdate);
     }
 
     #onGenericMsg = async (...[{ message, sender }]: Parameters<Parameters<typeof this._conn.on<"Message">>[1]>) => {
@@ -1177,23 +1178,51 @@ export class BountyRoom extends MixedMapRoomClass {
         }
     }
 
+    /** @desc ~ in-memory set of joined players pending their map location information */
+    #pendingJoins = new Set<number>();
+
+    /** @desc ~ event for when the bot enters the room (first connect/subsequent reconnects) */
     #onCharUpdateRoom = (char: API_Character) => {
         if (char.MemberNumber !== this._conn.Player.MemberNumber) return;
+
+        console.info("FUNC(#onCharUpdateRoom):", `#pendingJoins(clear)`);
+        this.#pendingJoins.clear();
+
         this.#resetStayTime();
+
         for (const player of (this._conn.chatRoom?.characters ?? [])) {
             console.info("FUNC(#onCharUpdateRoom):", "[OnBotEnter]", `trigger(CheckPrisonTerm<${player.MemberNumber}>)`);
             this.#checkPrisonTerm(player.MemberNumber);
         }
     }
 
+    /** @desc ~ event on player join room... still without map information */
     #onCharEnter = (...[char]: Parameters<Parameters<typeof this._conn.on<"CharacterEntered">>[1]>) => {
+        console.info("FUNC(#onCharEnter):", `#pendingJoins(added)`, `+#${char.MemberNumber}`);
+        this.#pendingJoins.add(char.MemberNumber);
+    }
+
+    /** @desc ~ event on character move including the first map information */
+    #onCharMapUpdate = (...[char]: Parameters<Parameters<typeof this._conn.on<"CharacterMapUpdate">>[1]>) => {
+        if (this.#pendingJoins.delete(char.MemberNumber)) {
+            console.info("FUNC(#onCharMapUpdate):", `#pendingJoins(resolved)`, `-#${char.MemberNumber}`);
+            this.#onCharEnterMap(char);
+        }
+    }
+
+    /** @desc ~ event when character entered the map and their first map information arrived */
+    #onCharEnterMap = (char: API_Character) => {
         this.#beginStayTime(char);
-        console.info("FUNC(#onCharEnter):", "[OnCharEnter]", `trigger(CheckPrisonTerm<${char.MemberNumber}>)`);
+
+        console.info("FUNC(#onCharEnterMap):", "[OnCharEnter]", `trigger(CheckPrisonTerm<${char.MemberNumber}>)`);
         this.#checkPrisonTerm(char.MemberNumber);
     }
 
     #onCharLeft = (...[, char, , intentional]: Parameters<Parameters<typeof this._conn.on<"CharacterLeft">>[1]>) => {
         this.#endStayTime(char, intentional);
+
+        console.info("FUNC(#onCharLeft):", `#pendingJoins(resolved)`, `-#${char.MemberNumber}`);
+        this.#pendingJoins.delete(char.MemberNumber);
     }
     //#endregion
     
