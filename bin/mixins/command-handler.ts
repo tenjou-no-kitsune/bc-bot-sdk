@@ -7,7 +7,7 @@ import {
 import { DeepPartial, Satisfies, obj } from "../utils";
 
 //#region handler
-type CommandHandlerTexts = {
+export type CommandHandlerTexts = {
     help: {
         name: string,
         desc: string,

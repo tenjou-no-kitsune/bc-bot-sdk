@@ -4,6 +4,7 @@ import { CommandContext, WithCommands } from "../mixins";
 import { time, ObjStore, ObjStoreOptions, isValidNumber, map, parseApiCharObj, pickRandom, withReason } from "../utils";
 import { GenericMapRoomOptions, MapRoom, MapRoomArguments } from "./map-room";
 import { __ } from "../features/bounty";
+import _shared from "../features/_shared";
 
 //#region "Vendored" Variables
 /*/#region Script to "Vendor" (BC Game Client)
@@ -924,39 +925,18 @@ export class BountyRoom extends MixedMapRoomClass {
                 ...(arg.mixins ?? {}), "cmd-handler": {
                     ...(arg.mixins?.["cmd-handler"] ?? {}),
                     texts: {
-                        //#region help
                         help: {
-                            getHelpText: (ctx, cmds) => {
-                                const cmdToText = (cmd: typeof cmds[number]) =>
-                                    __.cmd.help.cmd_to_text(ctx.cmd.prefix, cmd.name, cmd.desc);
-
-                                const texts: string[] = [];
-                                if (ctx.roles.length) {
-                                    const privilegedCmds = cmds
-                                        .filter(c => ctx.roles.some(r => c.roles.has(r)))
-                                        .reduce<Record<string, Mutable<typeof cmds>>>((acc, c) => {
-                                            if (!c.roles.main) return acc;
-                                            if (!(c.roles.main in acc))
-                                                acc[c.roles.main] = [];
-                                            acc[c.roles.main].push(c);
-                                            return acc;
-                                        }, {});
-                                    Object.entries(privilegedCmds).forEach(([role, cmds]) =>
-                                        texts.push(
-                                            __.cmd.help.role_commands_title(role),
-                                            ...cmds.map(cmdToText),
-                                        )
-                                    );
-                                    texts.push(__.cmd.help.public_commands_title);
-                                }
-                                return [
-                                    __.cmd.help.title,
-                                    ...texts,
-                                    ...cmds.filter(c => !c.roles.size).map(cmdToText),
-                                ];
-                            },
+                            getHelpText: _shared.cmd.help.createTextFormatter({
+                                texts: {
+                                    help_title: __.cmd.help.title,
+                                    public_role_name: __.cmd.help.public_role_name,
+                                },
+                                templates: {
+                                    cmd_to_text: (prefix, name, desc) => __.cmd.help.cmd_to_text(prefix, name, desc),
+                                    role_title: __.cmd.help.role_commands_title,
+                                },
+                            }),
                         },
-                        //#endregion
                     },
                     roles: roles.mapping,
                 },

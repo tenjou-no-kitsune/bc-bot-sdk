@@ -192,7 +192,7 @@ const strings = Object.freeze({
     cmd: {
         help: {
             title: _p("📋 Bounty System Commands:"),
-            public_commands_title: `=== Public Commands`,
+            public_role_name: `Public`,
             role_commands_title: (role: string) => `=== ${role} Commands` as const,
             cmd_to_text: (pre: string, name: string, desc: string) => `${pre}${name} ${desc}` as const,
         },
