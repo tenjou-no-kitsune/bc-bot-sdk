@@ -73,7 +73,7 @@ const Base = {
                 updateRequest = null;
             };
             return {
-                cancel: () => cancel,
+                cancel: () => cancel(),
                 flush: () => {
                     console.info(prefix, "FUNC(update<flush>)");
                     cancel();
@@ -143,6 +143,7 @@ const KeyedCollection = {
             },
             set(key: string, value: T) {
                 data[key] = value;
+                queueUpdate();
                 return data[key];
             },
             update(key: string, dispatcher: (prev: T) => DeepPartial<T>) {
