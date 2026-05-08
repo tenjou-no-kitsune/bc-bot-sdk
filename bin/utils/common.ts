@@ -1,9 +1,4 @@
 
-export const parseString = (str: string | null | undefined, fallback: string = "") => {
-    if (typeof str === "string" && str === "") str = null;
-    return (str ?? fallback);
-}
-
 export const isValidNumber = (str: string) =>
     parseInt(str, 10) === Number(str);
 
@@ -12,7 +7,6 @@ export const as = <T>(val: unknown): T => val as T;
 export const withReason = <T = false>(reason: string, obj?: T) => Object.assign(obj ?? false, { reason });
 
 export type Satisfies<T> = T & Record<string, unknown>;
-export type StringLiteral<T> = T extends `${string & T}` ? T : never;
 
 // obj utility helpers
 namespace DeepUtils {
@@ -83,15 +77,28 @@ export const obj = Object.assign(
     },
 );
 
-export const truncate = (data: any): string => {
-    const str = typeof data === 'string' ? data : JSON.stringify(data);
-    const buf = Buffer.from(str, 'utf8');
-    
-    if (buf.length <= 4096) {
-        return str;
+export type StringLiteral<T> = T extends `${string & T}` ? T : never;
+export const str = Object.assign(
+    (val: unknown): string => {
+        switch (typeof val) {
+            case "string": return val;
+            case "number": return val.toString();
+            default: return JSON.stringify(val).replaceAll('"', '');
+        }
+    }, {
+        parse: (str: string | null | undefined, fallback: string = "") => {
+            if (typeof str === "string" && str === "") str = null;
+            return (str ?? fallback);
+        },
+        truncate: (data: unknown, limit: number = 4096): string => {
+            const str = typeof data === 'string' ? data : JSON.stringify(data);
+            const buf = Buffer.from(str, 'utf8');
+            
+            if (buf.length <= limit) return str;
+            return buf.subarray(0, limit).toString('utf8') + `... [TRUNCATED AT ${limit}B]`;
+        },
     }
-    return buf.subarray(0, 4096).toString('utf8') + "... [TRUNCATED AT 4KB]";
-}
+);
 
 export const areArraysEqual = <T>(arr1: T[], arr2: T[]) => {
     return JSON.stringify(arr1) === JSON.stringify(arr2);

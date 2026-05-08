@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { truncate } from "./common";
-import { obj as _obj } from "./common";
+import { str, obj as _obj, DeepPartial } from "./common";
 
 type ObjStoreOptions<T extends object> = {
     name: string,
@@ -57,7 +56,7 @@ const ObjStore = {
 
         //#region update
         const pushUpdate = (obj: T) => {
-            console.info(prefix, "FUNC(update<push>):", truncate(obj));
+            console.info(prefix, "FUNC(update<push>):", str.truncate(obj));
             writeObj(obj);
         }
 

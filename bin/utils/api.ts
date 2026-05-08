@@ -1,10 +1,10 @@
 // @ts-ignore
 import { API_Character } from "bc-bot";
-import { parseString } from "./common";
+import { str } from "./common";
 
 export const parseApiCharObj = (obj: API_Character) => {
     const { Name, NickName, MemberNumber } = obj;
-    const name = parseString(NickName, Name);
+    const name = str.parse(NickName, Name);
     return {
         name: name,
         number: MemberNumber,
