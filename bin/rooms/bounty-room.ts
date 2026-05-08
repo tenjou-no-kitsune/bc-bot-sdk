@@ -65,29 +65,6 @@ namespace BCB {
     type Util = ReturnType<typeof createUtil>;
     const createUtil = () => {
 
-        const time = {
-            getUnix: () => Math.floor(Date.now() / 1000),
-            formatSecs: (seconds: number) => {
-                const d = Math.floor(seconds / 86400);
-                const h = Math.floor((seconds % 86400) / 3600);
-                const m = Math.floor((seconds % 3600) / 60);
-                const s = Math.floor(seconds % 60);
-    
-                const parts = [d, h, m, s] as const;
-                const partUnits = ["d", "h", "m", "s"] as const;
-                const strParts = parts.map(part => String(part).padStart(2, "0"));
-
-                let str = "";
-                let include = false;
-                parts.forEach((part, idx) => {
-                    if (!part && !include) return;
-                    if (part && !include) include = true;
-                    str += `${strParts[idx]}${partUnits[idx]}`;
-                });
-                return str;
-            },
-        };
-
         const db = (() => {
             const stores = new Set<ObjStore<any>>();
 
@@ -152,7 +129,6 @@ namespace BCB {
         })();
 
         return {
-            time,
             db,
         };
     };
@@ -462,7 +438,7 @@ namespace BCB {
         const createTimer = (prisoner: PrisonerStub, fn: () => void) => {
             let endAt = prisoner.end.at;
             const getEndAt = () => endAt;
-            const getTimeLeft = () => (getEndAt() - util.time.getUnix()); 
+            const getTimeLeft = () => (getEndAt() - time.unix()); 
             const run = () => {
                 console.info("BCB.Prison(timers/run):", "[OnPrisonerTimerEnd]", `trigger(CheckPrisonTerm<${prisoner.id}>)`);
                 fn();
@@ -491,7 +467,7 @@ namespace BCB {
 
         const requestTimer = (prisonerId: number, fn: () => void) => {
             const prisoner = store.get(prisonerId.toString());
-            if (!prisoner || prisoner.id in timers || util.time.getUnix() > prisoner.end.at) return;
+            if (!prisoner || prisoner.id in timers || time.unix() > prisoner.end.at) return;
             const timer = createTimer(prisoner, fn);
             timers[prisoner.id] = timer;
         };
@@ -531,7 +507,7 @@ namespace BCB {
                 cell,
                 end: {
                     duration: sentenceTime,
-                    at: util.time.getUnix() + sentenceTime,
+                    at: time.unix() + sentenceTime,
                 },
                 flags: {
                     prompted: false,
@@ -732,7 +708,7 @@ namespace BCB {
         //#region getters
         let lastRefreshed: number = 0;
         const refreshBountyExpiration = () => {
-            const currTime = util.time.getUnix();
+            const currTime = time.unix();
             if (currTime <= lastRefreshed) return;
             let updated = 0;
             lastRefreshed = currTime;
@@ -855,7 +831,7 @@ namespace BCB {
                             gold,
                             expiration: {
                                 duration: 60 * 60 * 24 * 7,
-                                at: util.time.getUnix() + (60 * 60 * 24 * 7),
+                                at: time.unix() + (60 * 60 * 24 * 7),
                             },
                             desc: "Placed",
                             srcId: placer.id,
@@ -878,7 +854,7 @@ namespace BCB {
                                 desc: type, gold,
                                 expiration: {
                                     duration: expiration.duration,
-                                    at: util.time.getUnix() + expiration.duration,
+                                    at: time.unix() + expiration.duration,
                                 },
                             }
                         ]
@@ -1045,9 +1021,9 @@ export class BountyRoom extends MixedMapRoomClass {
 
         const createRecord = (id: number) => ({
             id,
-            joinedAt: util.time.getUnix(),
+            joinedAt: time.unix(),
             seal() {
-                const leftAt = util.time.getUnix();
+                const leftAt = time.unix();
                 return Object.freeze({
                     id: this.id,
                     joinedAt: this.joinedAt,
@@ -1157,7 +1133,7 @@ export class BountyRoom extends MixedMapRoomClass {
         const player = this._conn.chatRoom?.getCharacter(prisoner.id) ?? null;
         if (!player) return;
         if (this.#syncPrisonerRelease(player, prisoner)) return;
-        if (this.#util.time.getUnix() < prisoner.end.at) return this.#prison.requestTimer(prisoner.id, () => this.#checkPrisonTerm(id));
+        if (time.unix() < prisoner.end.at) return this.#prison.requestTimer(prisoner.id, () => this.#checkPrisonTerm(id));
         if (!prisoner.flags.prompted) return this.#promptPrisonRelease(player, prisoner);
         if (prisoner.flags.releasing) return this.#releasePrisoner(player);
     }
@@ -1659,7 +1635,7 @@ export class BountyRoom extends MixedMapRoomClass {
                 ctx.reply(__.cmd.claim_bounty.collected(bounty.gold, claimer.gold));
                 this._conn.SendMessage(
                     "Whisper",
-                    __.cmd.claim_bounty.been_collected(this.#util.time.formatSecs(prisoner.end.duration)),
+                    __.cmd.claim_bounty.been_collected(time.formatSecs(prisoner.end.duration)),
                     target.MemberNumber
                 );
 

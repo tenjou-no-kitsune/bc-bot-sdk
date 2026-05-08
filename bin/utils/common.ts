@@ -103,3 +103,26 @@ export type DeepPartial<T> = T extends Function
     ? T : T extends object 
         ? { [P in keyof T]?: DeepPartial<T[P]> } 
         : T;
+
+export const time = {
+    unix: () => Math.floor(Date.now() / 1000),
+    formatSecs: (seconds: number) => {
+        const d = Math.floor(seconds / 86400);
+        const h = Math.floor((seconds % 86400) / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = Math.floor(seconds % 60);
+
+        const parts = [d, h, m, s] as const;
+        const partUnits = ["d", "h", "m", "s"] as const;
+        const strParts = parts.map(part => String(part).padStart(2, "0"));
+
+        let str = "";
+        let include = false;
+        parts.forEach((part, idx) => {
+            if (!part && !include) return;
+            if (part && !include) include = true;
+            str += `${strParts[idx]}${partUnits[idx]}`;
+        });
+        return str;
+    },
+};
