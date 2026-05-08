@@ -22,6 +22,8 @@ const createBot = async ({ name, account, room, mixins }: BotConfig): Promise<Bo
         data: {
             default: {
                 defs: {
+                    name: room.options.defs.name,
+                    description: room.options.defs.description,
                     background: room.options.defs.background,
                     lists: {
                         admin: room.options.defs.lists.admin,
@@ -34,8 +36,6 @@ const createBot = async ({ name, account, room, mixins }: BotConfig): Promise<Bo
                     },
                 },
                 map: {
-                    name: room.options.map.name,
-                    description: room.options.map.description,
                     code: room.options.map.code,
                 },
                 bot: { description: room.options.bot.description },
@@ -43,10 +43,10 @@ const createBot = async ({ name, account, room, mixins }: BotConfig): Promise<Bo
         },
     });
     const loaded = store.load();
-    room.options.map.name = loaded.map.name;
-    room.options.map.description = loaded.map.description;
     room.options.map.code = loaded.map.code;
     room.options.bot.description = loaded.bot.description;
+    room.options.defs.name = loaded.defs.name;
+    room.options.defs.description = loaded.defs.description;
     room.options.defs.background = loaded.defs.background;
     room.options.defs.lists.admin = loaded.defs.lists.admin;
     room.options.defs.lists.ban = loaded.defs.lists.ban;
@@ -56,8 +56,8 @@ const createBot = async ({ name, account, room, mixins }: BotConfig): Promise<Bo
     //#endregion
 
     const defn = room.definition as RoomDefinition;
-    defn.Name = room.options.map.name;
-    defn.Description = room.options.map.description;
+    defn.Name = room.options.defs.name;
+    defn.Description = room.options.defs.description;
     defn.Background = room.options.defs.background;
     defn.Admin = room.options.defs.lists.admin;
     defn.Ban = room.options.defs.lists.ban;

@@ -23,6 +23,8 @@ import { ObjStore, areArraysEqual, parseApiCharObj } from "../utils";
 import { MixinConstructor, PartialMixinOptions } from "../mixins";
 
 type RoomDefinitionOptions = {
+    name: string,
+    description: string,
     background: string,
     lists: {
         admin: number[],
@@ -39,8 +41,6 @@ export type GenericMapRoomOptions<T = {}> = {
     defs: RoomDefinitionOptions,
     map: {
         code: string,
-        name: string,
-        description: string,
     },
     bot: {
         position: { X: number, Y: number },
@@ -174,13 +174,13 @@ export class MapRoom {
         Access, Visibility,
     }: ServerChatRoomSyncPropertiesMessage) => {
         let hasChanges = false;
-        if (Name !== this.#opts.map.name) {
-            this.#opts.map.name = Name;
+        if (Name !== this.#opts.defs.name) {
+            this.#opts.defs.name = Name;
             console.info("FUNC(#syncRoomDetails):", "updated with new room name");
             hasChanges = true;
         }
-        if (Description !== this.#opts.map.description) {
-            this.#opts.map.description = Description;
+        if (Description !== this.#opts.defs.description) {
+            this.#opts.defs.description = Description;
             console.info("FUNC(#syncRoomDetails):", "updated with new room description");
             hasChanges = true;
         }
@@ -221,6 +221,8 @@ export class MapRoom {
         const { map, bot, defs } = this.#opts;
         this.#store.update({
             defs: {
+                name: defs.name,
+                description: defs.description,
                 background: defs.background,
                 lists: {
                     admin: defs.lists.admin,
@@ -233,8 +235,6 @@ export class MapRoom {
                 },
             },
             map: {
-                name: map.name,
-                description: map.description,
                 code: map.code,
             },
             bot: { description: bot.description },
