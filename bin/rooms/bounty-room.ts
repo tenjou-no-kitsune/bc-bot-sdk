@@ -1,7 +1,7 @@
 //@ts-ignore
 import { API_Character, AssetGet } from "bc-bot";
 import { CommandContext, WithCommands } from "../mixins";
-import { time, ObjStore, ObjStoreOptions, isValidNumber, map, parseApiCharObj, pickRandom, withReason } from "../utils";
+import { ret, time, ObjStore, ObjStoreOptions, isValidNumber, map, parseApiCharObj, pickRandom } from "../utils";
 import { GenericMapRoomOptions, MapRoom, MapRoomArguments } from "./map-room";
 import { __ } from "../features/bounty";
 import _shared from "../features/_shared";
@@ -604,15 +604,15 @@ namespace BCB {
         return {
             favors: {
                 add: (favor: Favor) => {
-                    if (catalogue.favors.find(f => f.name === favor.name)) return withReason("already exists in store");
+                    if (catalogue.favors.find(f => f.name === favor.name)) return ret.err("already exists in store");
                     updateFavors((favors) => favors.push(favor));
-                    return true;
+                    return ret.ok();
                 },
                 remove: (index: number) => {
-                    if (!catalogue.favors[index]) return withReason(__.shop.err.non_existent_index);
+                    if (!catalogue.favors[index]) return ret.err(__.shop.err.non_existent_index);
                     const favor = catalogue.favors[index];
                     updateFavors((favors) => favors.splice(index, 1));
-                    return favor;
+                    return ret.ok(favor);
                 },
                 get list() { return catalogue.favors; }
             },
@@ -760,9 +760,9 @@ namespace BCB {
             requirePlayer, getBounty, requireBounty,
             //#region bounty ops
             canHaveBounty: (id: number) => {
-                if (prison.has(id)) return withReason(__.core.err.is_imprisoned);
-                if (roles.lists.immunity.has(id)) return withReason(__.core.err.is_immune);
-                return true;
+                if (prison.has(id)) return ret.err(__.core.err.is_imprisoned);
+                if (roles.lists.immunity.has(id)) return ret.err(__.core.err.is_immune);
+                return ret.ok();
             },
             claimBounty: (claimer: number | Player, bounty: number | Bounty | null) => {
                 if (typeof claimer === "number") claimer = requirePlayer(claimer);
@@ -855,8 +855,8 @@ namespace BCB {
             //#region favor ops
             purchaseFavor: (player: number | Player, favor: Favor) => {
                 if (typeof player === "number") player = requirePlayer(player);
-                if (player.gold < favor.cost) return withReason(__.core.err.not_enough_gold);
-                return stores.players.update(player.id.toString(), (prev) => ({
+                if (player.gold < favor.cost) return ret.err(__.core.err.not_enough_gold);
+                return ret.ok(stores.players.update(player.id.toString(), (prev) => ({
                     gold: prev.gold - favor.cost,
                     inventory: {
                         favors: [
@@ -864,7 +864,7 @@ namespace BCB {
                             favor.name,
                         ],
                     },
-                }));
+                })));
             },
             getOwedFavors: (player: number | Player | null = null) => {
                 const owed = getOwedFavors();
@@ -1168,7 +1168,7 @@ export class BountyRoom extends MixedMapRoomClass {
                 const id = parseInt(strId);
                 const bountyGold = parseInt(strBountyGold);
                 const canHaveBounty = this.#core.canHaveBounty(id);
-                if (!canHaveBounty) return ctx.reply(__.cmd.put_bounty.err.bounty_immunity(ctx, id, canHaveBounty.reason));
+                if (!canHaveBounty.ok) return ctx.reply(__.cmd.put_bounty.err.bounty_immunity(ctx, id, canHaveBounty.err));
                 if (bountyGold < 20) return ctx.reply(__.cmd.put_bounty.err.need_min_gold(ctx));
 
                 const result = this.#core.placeBounty(ctx.sender.MemberNumber, id);
@@ -1343,8 +1343,9 @@ export class BountyRoom extends MixedMapRoomClass {
                 if (index < 1 || index > favors.length) return ctx.reply(__.cmd.remove_favor.err.index_out_of_range(ctx));
 
                 const removed = this.#shop.favors.remove(index - 1);
-                if (!removed) return ctx.reply(__.cmd.remove_favor.err.failed(removed.reason));
-                ctx.reply(__.cmd.remove_favor.removed(removed.name, removed.cost));
+                if (!removed.ok) return ctx.reply(__.cmd.remove_favor.err.failed(removed.err));
+                const favor = removed.value;
+                ctx.reply(__.cmd.remove_favor.removed(favor.name, favor.cost));
             },
         });
 
@@ -1525,7 +1526,7 @@ export class BountyRoom extends MixedMapRoomClass {
 
                 const favor = favors[index - 1];
                 const purchased = this.#core.purchaseFavor(ctx.sender.MemberNumber, favor);
-                if (!purchased) return ctx.reply(__.cmd.buy.err.failed(purchased.reason));
+                if (!purchased.ok) return ctx.reply(__.cmd.buy.err.failed(purchased.err));
                 ctx.reply(__.cmd.buy.bought(favor.name));
             },
         });
@@ -1647,7 +1648,7 @@ export class BountyRoom extends MixedMapRoomClass {
                 const id = parseInt(strId);
                 const bountyGold = parseInt(strBountyGold);
                 const canHaveBounty = this.#core.canHaveBounty(id);
-                if (!canHaveBounty) return ctx.reply(__.cmd.place_bounty.err.bounty_immunity(ctx, id, canHaveBounty.reason));
+                if (!canHaveBounty.ok) return ctx.reply(__.cmd.place_bounty.err.bounty_immunity(ctx, id, canHaveBounty.err));
                 if (bountyGold < 20) return ctx.reply(__.cmd.place_bounty.err.need_min_gold(ctx))
 
                 const player = this.#core.requirePlayer(ctx.sender.MemberNumber);

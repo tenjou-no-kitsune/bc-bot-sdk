@@ -4,7 +4,13 @@ export const isValidNumber = (str: string) =>
 
 export const as = <T>(val: unknown): T => val as T;
 
-export const withReason = <T = false>(reason: string, obj?: T) => Object.assign(obj ?? false, { reason });
+export const ret = {
+    err: <T extends string>(err: T) => ({ ok: false as const, err }),
+    ok: (<T>(value?: T) => ({ ok: true as const, value })) as {
+        (): ({ ok: true });
+        <T>(value: T): ({ ok: true, value: T });
+    },
+};
 
 export type Satisfies<T> = T & Record<string, unknown>;
 
