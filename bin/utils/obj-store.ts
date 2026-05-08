@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { str, obj as _obj, DeepPartial } from "./common";
 
-type ObjStoreOptions<T extends object> = {
+export type ObjStoreOptions<T extends object> = {
     name: string,
     file: {
         path: string,
@@ -15,9 +15,9 @@ type ObjStoreOptions<T extends object> = {
     }>
 };
 
-type ObjStore<T extends object> = ReturnType<typeof ObjStore.create<T>>;
+type ObjStore<T extends object> = ReturnType<typeof Base.create<T>>;
 
-const ObjStore = {
+const Base = {
     create: <T extends object>({
         name, file, data,
         options = {
@@ -115,6 +115,55 @@ const ObjStore = {
             },
         };
     },
+};
+
+const KeyedCollection = {
+    create: <T extends object>({
+        name, file,
+        options = {
+            queueUpdateMs: 0,
+        },
+    }: Omit<ObjStoreOptions<never>, "data">) =>
+        Base.create<Record<string, T>>({
+            name, file,
+            data: { default: {} },
+            options,
+        }),
+    wrap: <T extends object>(store: ObjStore<Record<string, T>>) => {
+        const data = store.load();
+        const queueUpdate = () => store.update(data);
+
+        return {
+            get keys() { return Object.keys(data); },
+            get values() { return Object.values(data); },
+            has(key: string) { return key in data; },
+            get(key: string): T | null {
+                if (key in data) return data[key];
+                return null;
+            },
+            set(key: string, value: T) {
+                data[key] = value;
+                return data[key];
+            },
+            update(key: string, dispatcher: (prev: T) => DeepPartial<T>) {
+                const diff = dispatcher(data[key]);
+                if (key in data) _obj.deep.apply(diff, data[key]);
+                else data[key] = diff as T;
+                queueUpdate();
+                return data[key];
+            },
+            delete(key: string, shouldQueue = true) {
+                delete data[key];
+                if (shouldQueue) queueUpdate();
+            },
+            queueUpdate,
+        };
+    },
+};
+
+const ObjStore = {
+    ...Base,
+    KeyedCollection,
 };
 
 export default ObjStore;

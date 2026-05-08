@@ -1,7 +1,7 @@
 //@ts-ignore
 import { API_Character, AssetGet } from "bc-bot";
 import { CommandContext, WithCommands } from "../mixins";
-import { DeepPartial, ObjStore, obj, isValidNumber, map, parseApiCharObj, pickRandom, withReason } from "../utils";
+import { time, ObjStore, ObjStoreOptions, isValidNumber, map, parseApiCharObj, pickRandom, withReason } from "../utils";
 import { GenericMapRoomOptions, MapRoom, MapRoomArguments } from "./map-room";
 import { __ } from "../features/bounty";
 
@@ -66,15 +66,8 @@ namespace BCB {
     const createUtil = () => {
 
         const db = (() => {
-            const stores = new Set<ObjStore<any>>();
-
-            const createStore = <T extends object>(...params: Parameters<typeof ObjStore.create<T>>) => {
-                const store = ObjStore.create(...params);
-                stores.add(store);
-                return store;
-            };
-
-            const getStoreIdentifiers = (namespace: string, name: string): Pick<Parameters<typeof createStore>["0"], "name" | "file"> => ({
+            const stores = new Set<ObjStore<any>>();;
+            const getStoreIdentifiers = (namespace: string, name: string): Pick<ObjStoreOptions<never>, "name" | "file"> => ({
                 name: `${namespace}/bcb<${name}>`,
                 file: { path: `${namespace}/bcb/${name}.json` },
             });
@@ -86,44 +79,21 @@ namespace BCB {
                     }
                 },
                 getStoreIdentifiers,
-                createStore,
+                createStore: <T extends object>(opts: ObjStoreOptions<T>) => {
+                    const store = ObjStore.create(opts);
+                    stores.add(store);
+                    return store;
+                },
                 createKeyedCollection: <T extends object>(namespace: string, name: string) => {
-                    const store = createStore<Record<string, T>>({
+                    const store = ObjStore.KeyedCollection.create<T>({
                         ...getStoreIdentifiers(namespace, name),
-                        data: { default: {} },
                         options: {
                             queueUpdateMs: 500,
                         },
                     });
-                    const data = store.load();
-                    const queueUpdate = () => store.update(data);
-        
-                    return {
-                        get store() { return store; },
-                        get keys() { return Object.keys(data); },
-                        get values() { return Object.values(data); },
-                        has(key: string) { return key in data; },
-                        get(key: string): T | null {
-                            if (key in data) return data[key];
-                            return null;
-                        },
-                        set(key: string, value: T) {
-                            data[key] = value;
-                            return data[key];
-                        },
-                        update(key: string, dispatcher: (prev: T) => DeepPartial<T>) {
-                            const diff = dispatcher(data[key]);
-                            if (key in data) obj.deep.apply(diff, data[key]);
-                            else data[key] = diff as T;
-                            queueUpdate();
-                            return data[key];
-                        },
-                        delete(key: string, shouldQueue = true) {
-                            delete data[key];
-                            if (shouldQueue) queueUpdate();
-                        },
-                        queueUpdate,
-                    };
+                    stores.add(store);
+
+                    return ObjStore.KeyedCollection.wrap(store);
                 },
             };
         })();
