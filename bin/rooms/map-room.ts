@@ -19,7 +19,7 @@ import {
 //@ts-ignore
 } from "bc-bot";
 import { ChatRoomMapManager } from "../vendor/bc/chat-room-map-view";
-import { ObjStore, areArraysEqual, parseApiCharObj } from "../utils";
+import { ObjStore, areArraysEqual, ensure, parseApiCharObj } from "../utils";
 import { MixinConstructor, PartialMixinOptions } from "../mixins";
 
 type RoomDefinitionOptions = {
@@ -39,11 +39,11 @@ type RoomDefinitionOptions = {
 
 export type GenericMapRoomOptions<T = {}> = {
     defs: RoomDefinitionOptions,
-    map: {
+    map: null | {
         code: string,
+        position: { X: number, Y: number },
     },
     bot: {
-        position: { X: number, Y: number },
         description: string,
         getAnnounceMsg?: (name: string) => string,
         getGreeting?: (name: string) => string,
@@ -155,6 +155,7 @@ export class MapRoom {
 
     //#region Sync Methods
     #syncMapCode = (mapData: ServerChatRoomMapData): boolean => {
+        if (!this.#opts.map) return false;
         try {
             const mapCode = ChatRoomMapManager.Map.exportString(mapData);
             if (mapCode !== this.#opts.map.code) {
@@ -234,9 +235,12 @@ export class MapRoom {
                     visibility: defs.privacy.visibility
                 },
             },
-            map: {
-                code: map.code,
-            },
+            map: map
+                ? {
+                    code: map.code,
+                    position: map.position,
+                }
+                : null,
             bot: { description: bot.description },
         });
     }
@@ -245,19 +249,30 @@ export class MapRoom {
     //#region Init Methods
     #setupRoom = async () => {
         try {
-            const data = ChatRoomMapManager.Map.importString(this.#opts.map.code);
-            this._conn.chatRoom!.map.setMapFromData(data!);
+            const data = (
+                this.#opts.map
+                    ? ChatRoomMapManager.Map.importString(this.#opts.map.code)
+                    : null
+            ) ?? ensure<ServerChatRoomMapData>({ Type: "Never" });
+            this._conn.chatRoom!.map.setMapFromData(data);
         } catch (e) {
-            console.error("FUNC(#setupRoomMap):", "failed to set map data", e);
+            console.error("FUNC(#setupRoom):", "failed to set map data", e);
         }
     };
 
     #setupCharacter = async () => {
-        const { position, description } = this.#opts.bot;
+        const { description } = this.#opts.bot;
 
-        this._conn.moveOnMap(position.X, position.Y);
-        if (description) this._conn.setBotDescription(description);
+        this._conn.setBotDescription(description);
+        await this.#setupCharacterOnMap();
         // this.conn.Player.SetActivePose(["Kneel"]);
     };
+
+    #setupCharacterOnMap = async () => {
+        if (!this.#opts.map) return;
+        const { position } = this.#opts.map;
+
+        this._conn.moveOnMap(position.X, position.Y);
+    }
     //#endregion
 }

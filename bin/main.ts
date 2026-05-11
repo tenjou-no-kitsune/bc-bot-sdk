@@ -35,15 +35,23 @@ const createBot = async ({ name, account, room, mixins }: BotConfig): Promise<Bo
                         visibility: room.options.defs.privacy.visibility,
                     },
                 },
-                map: {
-                    code: room.options.map.code,
-                },
+                map: room.options.map
+                    ? {
+                        code: room.options.map.code,
+                        position: room.options.map.position,
+                    }
+                    : null,
                 bot: { description: room.options.bot.description },
             },
         },
     });
     const loaded = store.load();
-    room.options.map.code = loaded.map.code;
+    room.options.map = loaded.map
+        ? {
+            code: loaded.map.code,
+            position: loaded.map.position,
+        }
+        : null;
     room.options.bot.description = loaded.bot.description;
     room.options.defs.name = loaded.defs.name;
     room.options.defs.description = loaded.defs.description;
