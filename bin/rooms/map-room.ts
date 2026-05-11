@@ -117,8 +117,8 @@ export class MapRoom {
         console.info("[Character Entered]:", char);
         
         const { getAnnounceMsg, getGreeting } = this.#opts.bot;
-        if (getAnnounceMsg) this._conn.SendMessage("Chat", `(${getAnnounceMsg(char.name)})`);
-        if (getGreeting) charObj.Tell("Whisper", `(${getGreeting(char.name)})`);
+        if (getAnnounceMsg) this._conn.SendMessage("Chat", `${getAnnounceMsg(char.name)}`);
+        if (getGreeting) charObj.Tell("Whisper", `${getGreeting(char.name)}`);
     }
 
     #onCharLeft = async (_srcMemberNumber: number, charObj: API_Character, _leaveMsg: string, _intentional: boolean) => {
