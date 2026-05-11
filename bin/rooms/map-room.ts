@@ -84,7 +84,7 @@ export class MapRoom {
         this._conn.on("RoomJoin", this.#onChatRoomJoined);
     }
 
-    public init = async () => {
+    public async init() {
         await this.#setupRoom();
         await this.#setupCharacter();
     }
