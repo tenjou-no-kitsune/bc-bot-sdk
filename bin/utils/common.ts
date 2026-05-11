@@ -2,8 +2,6 @@
 export const isValidNumber = (str: string) =>
     parseInt(str, 10) === Number(str);
 
-export const as = <T>(val: unknown): T => val as T;
-
 export const ret = {
     err: <T extends string>(err: T) => ({ ok: false as const, err }),
     ok: (<T>(value?: T) => ({ ok: true as const, value })) as {
@@ -13,6 +11,8 @@ export const ret = {
 };
 
 export type Satisfies<T> = T & Record<string, unknown>;
+export const ensure = <T>(val: T) => val;
+export const as = <T>(val: unknown): T => val as T;
 
 // obj utility helpers
 namespace DeepUtils {
