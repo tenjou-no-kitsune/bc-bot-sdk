@@ -47,6 +47,7 @@ export type GenericMapRoomOptions<T = {}> = {
         description: string,
         getAnnounceMsg?: (name: string) => string,
         getGreeting?: (name: string) => string,
+        getEnterEmote?: (name: string) => string;
     },    
 } & T;
 
@@ -116,9 +117,10 @@ export class MapRoom {
         console.debug("EVENT(#onCharEnter)");
         console.info("[Character Entered]:", char);
         
-        const { getAnnounceMsg, getGreeting } = this.#opts.bot;
+        const { getAnnounceMsg, getGreeting, getEnterEmote } = this.#opts.bot;
         if (getAnnounceMsg) this._conn.SendMessage("Chat", `${getAnnounceMsg(char.name)}`);
         if (getGreeting) charObj.Tell("Whisper", `${getGreeting(char.name)}`);
+        if (getEnterEmote) this._conn.SendMessage("Emote", getEnterEmote(char.name));
     }
 
     #onCharLeft = async (_srcMemberNumber: number, charObj: API_Character, _leaveMsg: string, _intentional: boolean) => {
