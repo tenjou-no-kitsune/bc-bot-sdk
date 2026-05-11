@@ -3,11 +3,18 @@ export const isValidNumber = (str: string) =>
     parseInt(str, 10) === Number(str);
 
 export const ret = {
+    /** @desc ~ Rust-style Result::Err(err) */
     err: <T extends string>(err: T) => ({ ok: false as const, err }),
+    /** @desc ~ Rust-style Result::Ok() */
     ok: (<T>(value?: T) => ({ ok: true as const, value })) as {
         (): ({ ok: true });
         <T>(value: T): ({ ok: true, value: T });
     },
+    /** @desc ~ return a computed value, and run a post-effect */
+    and: <T>(value: T, effect: () => void) => {
+        effect();
+        return value;
+    }
 };
 
 export type Satisfies<T> = T & Record<string, unknown>;
