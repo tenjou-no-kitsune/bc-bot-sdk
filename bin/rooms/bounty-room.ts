@@ -957,11 +957,16 @@ export class BountyRoom extends MixedMapRoomClass {
         //#endregion
     }
 
+    public override init = async () => {
+        await super.init();
+        this.#onBotRoomConnect();
+    }
+
     public override exit = async () => {
         this.#util.db.flush();
         this.#pending.purge();
         this.#prison.stop();
-        super.exit();
+        await super.exit();
     };
 
     //#region stay time
@@ -1091,27 +1096,19 @@ export class BountyRoom extends MixedMapRoomClass {
 
     //#region events
     #setupEvents = () => {
-        this._conn.on("Message", this.#onGenericMsg);
         this._conn.on("CharacterEntered", this.#onCharEnter);
         this._conn.on("CharacterLeft", this.#onCharLeft);
         this._conn.on("CharacterMapUpdate", this.#onCharMapUpdate);
-    }
-
-    #onGenericMsg = async (...[{ message, sender }]: Parameters<Parameters<typeof this._conn.on<"Message">>[1]>) => {
-        console.debug("EVENT(#onGenericMsg): ", message);
-        if (message.Type === "Action") {
-            if (message.Content === "ServerUpdateRoom") this.#onCharUpdateRoom(sender);
-        }
+        this._conn.on("RoomJoin", this.#onBotRoomConnect);
+        this._conn.on("RoomCreate", this.#onBotRoomConnect);
     }
 
     /** @desc ~ in-memory set of joined players pending their map location information */
     #pendingJoins = new Set<number>();
 
     /** @desc ~ event for when the bot enters the room (first connect/subsequent reconnects) */
-    #onCharUpdateRoom = (char: API_Character) => {
-        if (char.MemberNumber !== this._conn.Player.MemberNumber) return;
-
-        console.info("FUNC(#onCharUpdateRoom):", `#pendingJoins(clear)`);
+    #onBotRoomConnect = () => {
+        console.info("FUNC(#onBotRoomConnect):", `#pendingJoins(clear)`);
         this.#pendingJoins.clear();
 
         this.#resetStayTime();
