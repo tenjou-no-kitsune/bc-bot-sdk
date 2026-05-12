@@ -1363,10 +1363,11 @@ export class BountyRoom extends MixedMapRoomClass {
             name: __.cmd.add_favor.name, desc: __.cmd.add_favor.desc,
             roles: [this.#roles.Admin],
             callback: (ctx) => {
-                const [strPrice, favorName] = ctx.cmd.args;
+                const [strPrice, ...strRest] = ctx.cmd.args;
                 if (!strPrice || !isValidNumber(strPrice)) return ctx.reply(__.cmd.add_favor.err.invalid_price(ctx));
-                if (!favorName) return ctx.reply(__.cmd.add_favor.err.invalid_name(ctx));
+                if (!strRest.length) return ctx.reply(__.cmd.add_favor.err.invalid_name(ctx));
 
+                const favorName = strRest.join(" ");
                 const price = parseInt(strPrice);
                 if (price <= 0) return ctx.reply(__.cmd.add_favor.err.neg_or_zero_price(ctx));
 
