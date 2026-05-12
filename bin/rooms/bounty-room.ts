@@ -1249,6 +1249,21 @@ export class BountyRoom extends MixedMapRoomClass {
                 ctx.reply(__.cmd.remove_admin.removed(id, list.length));
             },
         });
+
+        // !listadmin
+        this._cmd.register({
+            name: __.cmd.list_admin.name, desc: __.cmd.list_admin.desc,
+            roles: [this.#roles.SuperAdmin],
+            callback: (ctx) => {
+                const list = this.#roles.lists.admin.get();
+                ctx.reply(
+                    __.cmd.list_admin.title(list.length),
+                    ...list.map(id =>
+                        __.cmd.list_admin.entry(id),
+                    ),
+                );
+            },
+        }),
         //#endregion
 
         //#region admin
@@ -1280,6 +1295,21 @@ export class BountyRoom extends MixedMapRoomClass {
                 ctx.reply(__.cmd.remove_immune.removed(id, list.length));
             },
         });
+
+        // !listimmune
+        this._cmd.register({
+            name: __.cmd.list_immune.name, desc: __.cmd.list_immune.desc,
+            roles: [this.#roles.Admin],
+            callback: (ctx) => {
+                const list = this.#roles.lists.immunity.get();
+                ctx.reply(
+                    __.cmd.list_immune.title(list.length),
+                    ...list.map(id =>
+                        __.cmd.list_immune.entry(id),
+                    ),
+                );
+            },
+        }),
         //#endregion
 
         //#region dom list
@@ -1310,6 +1340,21 @@ export class BountyRoom extends MixedMapRoomClass {
                 ctx.reply(__.cmd.remove_dom.removed(id, list.length));
             },
         });
+
+        // !listdom
+        this._cmd.register({
+            name: __.cmd.list_dom.name, desc: __.cmd.list_dom.desc,
+            roles: [this.#roles.Admin],
+            callback: (ctx) => {
+                const list = this.#roles.lists.dom.get();
+                ctx.reply(
+                    __.cmd.list_dom.title(list.length),
+                    ...list.map(id =>
+                        __.cmd.list_dom.entry(id),
+                    ),
+                );
+            },
+        }),
         //#endregion
 
         //#region favors mgmt

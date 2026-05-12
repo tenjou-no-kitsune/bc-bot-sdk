@@ -259,6 +259,14 @@ const strings = Object.freeze({
                 not_in_list: (id: number) => _w(`#${id} is not in the admin list.`),
             },
         })),
+        list_admin: Tmpl.cmd({
+            name: "listadmin",
+            params: fmt.params(),
+            desc: "displays the list of admins",
+        }, () => ({
+            title: (count: number) => _p(`${count} Admins:`),
+            entry: (id: number) => `- #${id}`,
+        })),
         add_immune: Tmpl.cmd({
             name: "addimmune",
             params: fmt.params("id"),
@@ -281,6 +289,14 @@ const strings = Object.freeze({
                 not_in_list: (id: number) => _w(`#${id} is not in the immune list.`),
             },
         })),
+        list_immune: Tmpl.cmd({
+            name: "listimmune",
+            params: fmt.params(),
+            desc: "displays the list of immune",
+        }, () => ({
+            title: (count: number) => _p(`${count} Immunes:`),
+            entry: (id: number) => `- #${id}`,
+        })),
         add_dom: Tmpl.cmd({
             name: "adddom",
             params: fmt.params("id"),
@@ -302,6 +318,14 @@ const strings = Object.freeze({
                 invalid_id: _inval("please provide a valid id"),
                 not_in_list: (id: number) => _w(`#${id} is not in the dom list.`),
             },
+        })),
+        list_dom: Tmpl.cmd({
+            name: "listdom",
+            params: fmt.params(),
+            desc: "displays the list of doms",
+        }, () => ({
+            title: (count: number) => _p(`${count} Doms:`),
+            entry: (id: number) => `- #${id}`,
         })),
         add_favor: Tmpl.cmd({
             name: "addfavor",
