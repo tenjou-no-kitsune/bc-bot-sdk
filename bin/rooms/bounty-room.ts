@@ -1,922 +1,41 @@
 //@ts-ignore
-import { API_Character, AssetGet } from "bc-bot";
-import { CommandContext, WithCommands } from "../mixins";
-import { ret, time, ObjStore, ObjStoreOptions, isValidNumber, map, parseApiCharObj, pickRandom } from "../utils";
+import { API_Character } from "bc-bot";
 import { GenericMapRoomOptions, MapRoom, MapRoomArguments } from "./map-room";
-import { __ } from "../features/bounty";
+import { time, isValidNumber, parseApiCharObj, pickRandom } from "../utils";
+import { WithCommands } from "../mixins";
+
 import _shared from "../features/_shared";
-
-//#region "Vendored" Variables
-/*/#region Script to "Vendor" (BC Game Client)
-(() => {
-    const StrippedGroups = AssetGroup.filter(a => (a.Clothing) && !a.BodyCosplay && !a.Name.includes("Luzi")).map(a => a.Name);
-    const CosplayAssets = Asset.filter(a => a.BodyCosplay);
-    const GroupsWithCosplayAssets = new Set(CosplayAssets.map(a => a.Group.Name));
-    const StrippedGroupsWithCosplay = [...GroupsWithCosplayAssets].filter(i => StrippedGroups.includes(i))
-    const StrippedCosplayAssets = CosplayAssets.filter(a => StrippedGroupsWithCosplay.includes(a.Group.Name)).map(a => a.Name);
-
-    const vendored = {
-        StrippedGroups,
-        StrippedGroupsWithCosplay,
-        StrippedCosplayAssets,
-    };
-
-    return {
-        ...vendored,
-        vendor() {
-            copy(
-                JSON.stringify(vendored, null, 4)
-                    .replace(/\[\s+([\s\S]+?)\s+\]/g, (match, content) => `[ ${content.replace(/\s+/g, ' ')} ]`)
-            )
-        },
-    }
-})();
-//#endregion */
-
-const BC = Object.freeze((() => {
-    // paste vendored object here
-    const src = Object.freeze({
-        "StrippedGroups": [ "ClothOuter", "Cloth", "Decals", "ClothAccessory", "Necklace", "Suit", "SuitLower", "ClothLower", "Bra", "Corset", "Panties", "Socks", "SocksRight", "SocksLeft", "AnkletRight", "AnkletLeft", "Garters", "Shoes", "Hat", "HairAccessory3", "HairAccessory1", "Gloves", "HandAccessoryLeft", "HandAccessoryRight", "Bracelet", "Glasses", "Jewelry", "Mask" ],
-        "StrippedGroupsWithCosplay": [ "ClothAccessory", "HairAccessory3", "HairAccessory1", "Mask" ],
-        "StrippedCosplayAssets": [ "Glitter", "Kissmark", "WombTattoos", "BodyWritings", "FaceWritings", "Halo", "Ears1", "Ears2", "PonyEars1", "BunnyEars1", "BunnyEars2", "PuppyEars1", "SuccubusHorns", "Horns", "Horns2", "Horns3", "FoxEars1", "BatWings", "KittenEars1", "KittenEars2", "WolfEars1", "WolfEars2", "FoxEars2", "FoxEars3", "PuppyEars2", "RaccoonEars1", "MouseEars1", "MouseEars2", "ElfEars", "CowHorns", "Halo", "Antennae", "UnicornHorn", "DildocornHorn", "BigLynxEars", "CyberneticEars1", "CyberEars", "FloppyBunnyEars", "Onihorns", "SkunkEars", "AquaticEars", "CustomizableFluffyEars1", "CustomizableFluffyEars2", "CustomizableFluffyEars3", "CustomizableCatEars", "CustomizableElfEars", "CustomizableCowEars", "PetNose", "Glitter", "Kissmark", "FaceScars" ]
-    });
-
-    return {
-        Strip: {
-            Groups: Object.assign(new Set(src.StrippedGroups), {
-                WithCosplay: Object.assign(new Set(src.StrippedGroupsWithCosplay), {
-                    Assets: new Set(src.StrippedCosplayAssets)
-                }),
-            }),
-        },
-    };
-})());
-//#endregion
-
-//#region modules
-namespace BCB {
-
-    //#region config
-    export type Config = {
-        namespace: string,
-    };
-    //#endregion
-
-    //#region util
-    type Util = ReturnType<typeof createUtil>;
-    const createUtil = () => {
-
-        const db = (() => {
-            const stores = new Set<ObjStore<any>>();;
-            const getStoreIdentifiers = (namespace: string, name: string): Pick<ObjStoreOptions<never>, "name" | "file"> => ({
-                name: `${namespace}/bcb<${name}>`,
-                file: { path: `${namespace}/bcb/${name}.json` },
-            });
-
-            return {
-                flush: () => {
-                    for (const store of stores) {
-                        store.flush();
-                    }
-                },
-                getStoreIdentifiers,
-                createStore: <T extends object>(opts: ObjStoreOptions<T>) => {
-                    const store = ObjStore.create(opts);
-                    stores.add(store);
-                    return store;
-                },
-                createKeyedCollection: <T extends object>(namespace: string, name: string) => {
-                    const store = ObjStore.KeyedCollection.create<T>({
-                        ...getStoreIdentifiers(namespace, name),
-                        options: {
-                            queueUpdateMs: 500,
-                        },
-                    });
-                    stores.add(store);
-
-                    return ObjStore.KeyedCollection.wrap(store);
-                },
-            };
-        })();
-
-        return {
-            db,
-        };
-    };
-    export let util: Util = createUtil();
-    //#endregion
-
-    //#region common
-    type CommonAreas = {
-        Shop: ReturnType<typeof map.createArea>,
-        Claim: ReturnType<typeof map.createArea>,
-        BountyTarget: ReturnType<typeof map.createArea>,
-        Prison: ReturnType<typeof map.createTileList>,
-        Lobby: ReturnType<typeof map.createTileList>,
-    };
-    export type CommonConfig = {
-        defAreas: (helpers: {
-            defArea: typeof map.createArea,
-            defTileList: typeof map.createTileList
-        }) => CommonAreas,
-    };
-
-    export type Common = ReturnType<typeof createCommon>;
-    export const createCommon = ({ defAreas }: CommonConfig) => {
-        const areas = Object.freeze(
-            defAreas({
-                defArea: map.createArea,
-                defTileList: map.createTileList
-            })
-        );
-
-        return {
-            areas,
-        };
-    };
-    //#endregion
-
-    //#region pending
-    export type Pending = ReturnType<typeof createPending>;
-    export const createPending = () => {
-        const purgeFuncs: (() => void)[] = [];
-
-        const createRegistry = () => {
-            type RegistryAction = {
-                caller: number,
-                run: (ctx: CommandContext, ...params: any[]) => void,
-                cancel: () => void,
-                expiry: NodeJS.Timeout,
-            };
-            const actions = new Map<number, RegistryAction>();
-
-            const cancelAction = (caller: number) => {
-                clearTimeout(actions.get(caller)?.expiry);
-                actions.delete(caller);
-            };
-
-            const createAction = <TActionArgs extends any[]>(
-                caller: number,
-                callback: (ctx: CommandContext, ...args: TActionArgs) => void,
-                onTimeout: (run: typeof callback) => void = () => {},
-            ): RegistryAction => {
-                const cancel = () => cancelAction(caller);
-                const expiry: NodeJS.Timeout = setTimeout(() => {
-                    onTimeout(callback);
-                    cancel();
-                }, 10 * 1000);
-
-                return {
-                    caller,
-                    run: (...params: Parameters<typeof callback>) => {
-                        callback(...params);
-                        cancel();
-                    },
-                    cancel,
-                    expiry,
-                };
-            };
-
-            purgeFuncs.push(() => {
-                actions.forEach((action) => {
-                    action.cancel();
-                });
-            });
-
-            return {
-                get(caller: number) { return actions.get(caller) ?? null; },
-                queue<TActionArgs extends any[]>(...params: Parameters<typeof createAction<TActionArgs>>) {
-                    actions.set(params[0], createAction<TActionArgs>(...params));
-                },
-            };
-        };
-
-        return {
-            confirm: createRegistry(),
-            response: createRegistry(),
-            purge: () => purgeFuncs.forEach(purge => purge()),
-        };
-    };
-    //#endregion
-
-    //#region roles
-    export type RolesConfigAdditions = {
-        membersOf: {
-            SuperAdmin: number[],
-            GoldManager: number[],
-            BountyManager: number[],
-        },
-    };
-
-    const withNumArrValues = <K extends string>(obj: Record<K, number[]>) => obj;
-    export type Roles = ReturnType<typeof createRoles>;
-    export const createRoles = ({ namespace, membersOf }: Config & RolesConfigAdditions) => {
-
-        const fixedRoles = Object.freeze(() => {
-            const createIds = (name: string, ids: number[]) => Object.assign(ids, {
-                _name: name,
-            });
-        
-            return Object.freeze({
-                SuperAdmin: createIds(__.roles.names.super_admin, membersOf.SuperAdmin),
-                GoldManager: createIds(__.roles.names.gold_manager, membersOf.GoldManager),
-                BountyManager: createIds(__.roles.names.bounty_manager, membersOf.BountyManager),
-            });
-        })();
-
-        type RoleLists = typeof initialRoles;
-        const initialRoles = withNumArrValues({
-            immunity: [],
-            admin: [...fixedRoles.SuperAdmin],
-            dom: [],
-        });
-
-        const store = util.db.createStore({
-            ...util.db.getStoreIdentifiers(namespace, "roles"),
-            data: { default: initialRoles },
-            options: {
-                queueUpdateMs: 500,
-            },
-        });
-        const internalLists = store.load();
-        
-        type RoleKey = keyof RoleLists;
-        const createRoleList = (name: string, key: RoleKey) =>
-            Object.assign(() => internalLists[key], { _name: name });
-        type RoleMapping = typeof mapping;
-        const mapping = {
-            ...fixedRoles,
-            Admin: createRoleList(__.roles.names.admin, "admin"),
-            Dom: createRoleList(__.roles.names.dom, "dom"),
-            Immune: createRoleList(__.roles.names.immune, "immunity"),
-        };
-        const roles: Record<keyof RoleMapping, string> = Object.fromEntries(
-            Object.entries(mapping).map(([key, list]) => [key, list._name])
-        ) as never;
-
-        const createList = (key: keyof RoleLists) => {
-            const queueUpdate = () => store.update(internalLists);
-            return {
-                get() { return internalLists[key]; },
-                add(id: number): readonly number[] {
-                    if (internalLists[key].includes(id)) return [];
-                    internalLists[key].push(id);
-                    internalLists[key].sort();
-                    queueUpdate();
-                    return internalLists[key];
-                },
-                has(id: number) { return internalLists[key].includes(id )},
-                remove(id: number): readonly number[] {
-                    internalLists[key] = internalLists[key].filter(i => i !== id);
-                    queueUpdate();
-                    return internalLists[key];
-                },
-            };
-        };
-        const lists = (Object.keys(internalLists) as RoleKey[])
-            .reduce<Record<RoleKey, RoleList>>((acc, key) => {
-                acc[key] = createList(key);
-                return acc;
-            }, {} as Record<RoleKey, RoleList>);
-        type RoleList = ReturnType<typeof createList>;
-
-        return {
-            ...roles,
-            mapping: Object.fromEntries(
-                Object.entries(mapping).map(([, list]) => [list._name, list])
-            ),
-            lists,
-        };
-    };
-    //#endregion
-
-    //#region prison
-    //#region capture types
-    type CaptureRestraintItem = {
-        Group: AssetGroupName, Name: string, Color: ItemColor,
-        TypeRecord: ItemProperties["TypeRecord"] | null,
-        ExtraProp: Partial<ItemProperties> | null,
-        Lock: AssetLockType | null,
-    };
-    type CaptureRestraints = {
-        name: string,
-        createDesc: (vars: { name: string }) => string,
-        items: CaptureRestraintItem[],
-    };
-    //#endregion
-
-    //#region prisoner types
-    type PrisonCell = ChatRoomMapPos;
-    export type PrisonerStub = {
-        id: number,
-        cell: PrisonCell,
-        end: {
-            duration: number,
-            at: number,
-        },
-        /** @desc ~ flags to keep track of prisoner state */
-        flags: { 
-            /** @desc ~ whether extend/release is prompted; prompt when next seen */
-            prompted: boolean,
-            /** @desc ~ whether or not is confirmed releasing; release when next seen */
-            releasing: boolean,
-        },
-    };
-    export type Prisoner = PrisonerStub;
-    //#endregion
-    
-    export type PrisonConfigAdditions = {
-        restraints: CaptureRestraints,
-    };
-    type PrisonConfig = Config & PrisonConfigAdditions & { common: Common };
-    export type Prison = ReturnType<typeof createPrison>;
-    export const createPrison = ({ namespace, common, ...conf }: PrisonConfig) => {
-        const restraints = Object.freeze(conf.restraints);
-        let store = util.db.createKeyedCollection<PrisonerStub>(namespace, "prisoners");
-
-        //#region appearance
-        const strip = (target: API_Character) => {
-            target.Appearance.getAppearanceData().forEach(a => {
-                if (!BC.Strip.Groups.has(a.Group)) return;
-                if (BC.Strip.Groups.WithCosplay.has(a.Group) && BC.Strip.Groups.WithCosplay.Assets.has(a.Name)) return;
-                target.Appearance.RemoveItem(a.Group);
-            });
-        };
-
-        const restrain = ({ botName, targetName, target }: { botName: string, targetName: string, target: API_Character }) => {
-            restraints.items.forEach(r => {
-                const asset = AssetGet(r.Group, r.Name);
-                asset.Color = r.Color;
-                asset.Property = {};
-                if (r.TypeRecord || r.ExtraProp || r.Lock) {
-                    asset.Property = r.ExtraProp ?? {};
-                    if (r.TypeRecord) asset.Property.TypeRecord = r.TypeRecord;
-                    if (r.Lock) {
-                        asset.Property.LockedBy = r.Lock;
-                        asset.Property.LockMemberNumber = -1;
-                        //@ts-ignore
-                        asset.Property.LockMemberName = botName;
-                    }
-                }
-                asset.Craft = {
-                    Name: restraints.name,
-                    Description: restraints.createDesc({ name: targetName }),
-                    Color: Array.isArray(r.Color) ? r.Color.join(",") : r.Color,
-                    Private: false,
-                    Effects: {},
-                    Item: r.Name,
-                    ItemProperty: asset.Property,
-                    TypeRecord: r.TypeRecord ?? {},
-                    Lock: r.Lock ?? "",
-                    MemberNumber: -1,
-                    MemberName: botName,
-                };
-                target.Appearance.AddItem(asset);
-            });
-        };
-
-        const unrestrain = (target: API_Character) => {
-            target.Appearance.getAppearanceData().forEach(a => {
-                if (!a.Craft) return;
-                if (a.Craft.Name !== restraints.name) return;
-                target.Appearance.RemoveItem(a.Group);
-            });
-        };
-        //#endregion
-
-        //#region getters
-        const hydratePrisonerStub = (stub: PrisonerStub) => {
-            const { id, cell, end, flags } = stub;
-            return Object.freeze<Prisoner>({
-                id,
-                cell: { ...cell },
-                end: { ...end },
-                flags: { ...flags },
-            });
-        };
-
-        const getPrisoner = (id: number) => {
-            let stub = store.get(id.toString());
-            if (!stub) return null;
-            return hydratePrisonerStub(stub);
-        };
-        //#endregion
-
-        //#region timers
-        const timers: Record<number, PrisonTimer> = {};
-
-        type PrisonTimer = ReturnType<typeof createTimer>;
-        const createTimer = (prisoner: PrisonerStub, fn: () => void) => {
-            let endAt = prisoner.end.at;
-            const getEndAt = () => endAt;
-            const getTimeLeft = () => (getEndAt() - time.unix()); 
-            const run = () => {
-                console.info("BCB.Prison(timers/run):", "[OnPrisonerTimerEnd]", `trigger(CheckPrisonTerm<${prisoner.id}>)`);
-                fn();
-                cancel();
-            };
-
-            let timeout = setTimeout(run, getTimeLeft() * 1000);
-            const cancel = () => {
-                clearTimeout(timeout);
-                delete timers[prisoner.id];
-            };
-
-            return {
-                id: prisoner.id,
-                get timeLeft() { return getTimeLeft(); },
-                run, cancel,
-                extend(duration: number) {
-                    if (timers[prisoner.id] !== this) return false;
-                    clearTimeout(timeout);
-                    endAt += duration;
-                    timeout = setTimeout(run, getTimeLeft() * 1000);
-                    return true;
-                }
-            }
-        };
-
-        const requestTimer = (prisonerId: number, fn: () => void) => {
-            const prisoner = store.get(prisonerId.toString());
-            if (!prisoner || prisoner.id in timers || time.unix() > prisoner.end.at) return;
-            const timer = createTimer(prisoner, fn);
-            timers[prisoner.id] = timer;
-        };
-
-        const initTimers = (termCheckFuncMaker: (id: number) => () => void) => {
-            store.values.forEach(p => {
-                requestTimer(p.id, termCheckFuncMaker(p.id));
-            });
-        };
-
-        const removeTimer = (prisonerId: number) => {
-            if (!(prisonerId in timers)) return;
-            timers[prisonerId].cancel();
-        };
-
-        const cancelTimers = () => Object.values(timers).forEach(t => t.cancel());
-        //#endregion
-
-        //#region sentence ops
-        const sentencedTimeMapper: Record<BountyDesc["desc"], (reason: Bounty["reasons"][number]) => number> = {
-            "Room Hop": () => 10 * 60, // 10m
-            "Wall Walk": () => 0, // unused
-            "Placed": ({ gold }) => {
-                let calculatedTime = 10 * 60; // baseline 10min
-                calculatedTime += (Math.max(20, gold) - 20) * 30; // 30s for each subsequent gold
-                return Math.min(60 * 60, calculatedTime) // max 1h
-            },
-        };
-
-        const registerPrisoner = (cell: PrisonCell, bounty: Readonly<Bounty>) => {
-            let sentenceTime = 0; // in seconds
-            bounty.reasons.forEach(r => {
-                sentenceTime += sentencedTimeMapper[r.desc](r);
-            });
-            return store.set(bounty.id.toString(), {
-                id: bounty.id,
-                cell,
-                end: {
-                    duration: sentenceTime,
-                    at: time.unix() + sentenceTime,
-                },
-                flags: {
-                    prompted: false,
-                    releasing: false,
-                },
-            });
-        };
-
-        const extendPrisonerTerm = (id: number, duration: number) => {
-            store.update(id.toString(), (prev) => ({
-                flags: { ...defaultFlags },
-                end: {
-                    duration: prev.end.duration + duration,
-                    at: prev.end.at + duration,
-                },
-            }))
-            if (id in timers) timers[id].extend(duration);
-        };
-
-        const releasePrisoner = (id: number) => {
-            const prisoner = getPrisoner(id);
-            if (!prisoner) return false;
-            store.delete(prisoner.id.toString());
-            removeTimer(prisoner.id);
-            return true;
-        };
-        //#endregion
-
-        //#region flags
-        const defaultFlags: Prisoner["flags"] = {
-            prompted: false,
-            releasing: false,
-        } as const;
-
-        const updateFlag = (id: number, flag: keyof Prisoner["flags"], value: boolean) => {
-            store.update(id.toString(), () => ({
-                flags: {
-                    [flag]: value,
-                },
-            }));
-        };
-
-        const flag = (id: number, flag: keyof Prisoner["flags"]) => updateFlag(id, flag, true);
-        const unflag = (id: number, flag: keyof Prisoner["flags"]) => updateFlag(id, flag, false);
-        //#endregion
-
-        const strCell = (cell: PrisonCell) => `X${cell.X}Y${cell.Y}`;
-        return {
-            init: (conf: {
-                timers: Parameters<typeof initTimers>,
-            }) => initTimers(...conf.timers),
-            stop: () => cancelTimers(),
-            cells: {
-                get free() {
-                    const occupied = new Set(store.values.map(p => strCell(p.cell)));
-                    return common.areas.Prison.filter(c => !occupied.has(strCell(c)));
-                },
-            },
-            has(id: number) { return store.has(id.toString()); },
-            getPrisoner, flag, unflag, requestTimer,
-            hasTimerFor(id: number) { return id in timers; },
-            //#region control
-            extend: extendPrisonerTerm,
-            admit(
-                { bounty, botName, targetName, target, cell }: {
-                    bounty: Readonly<Bounty>,
-                    botName: string,
-                    targetName: string,
-                    target: API_Character,
-                    cell: ChatRoomMapPos
-                }
-            ) {
-                if (!target.AllowItem)
-                    return __.prison.err.no_add_restraint_permission;
-                if (store.get(bounty.id.toString()))
-                    return __.prison.err.already_a_prisoner;
-                target.mapTeleport(cell);
-                strip(target);
-                restrain({ botName, targetName, target });
-                return registerPrisoner(cell, bounty);
-            },
-            release(target: API_Character) {
-                if (!releasePrisoner(target.MemberNumber)) return false;
-                target.mapTeleport(pickRandom(common.areas.Lobby));
-                if (!target.AllowItem)
-                    target.connection.SendMessage(
-                        "Whisper",
-                        __.prison.warn.no_remove_restraint_permission,
-                        target.MemberNumber,
-                    );
-                else
-                    unrestrain(target);
-                return true;
-            },
-            //#endregion
-        };
-    };
-    //#endregion
-
-    //#region shop
-    type Favor = { name: string, cost: number };
-    export type Shop = ReturnType<typeof createShop>;
-    export const createShop = ({ namespace }: Config) => {
-        let catalogue = {
-            favors: [] as Favor[],
-        };
-
-        const store = util.db.createStore({
-            ...util.db.getStoreIdentifiers(namespace, "shop"),
-            data: { default: catalogue },
-            options: {
-                queueUpdateMs: 500,
-            },
-        });
-        catalogue = store.load();
-
-        const updateFavors = (updateFunc: (favors: Favor[]) => void) => {
-            updateFunc(catalogue.favors);
-            catalogue.favors.sort((f1, f2) => f1.cost - f2.cost);
-            store.update(catalogue);
-        };
-
-        return {
-            favors: {
-                add: (favor: Favor) => {
-                    if (catalogue.favors.find(f => f.name === favor.name)) return ret.err("already exists in store");
-                    updateFavors((favors) => favors.push(favor));
-                    return ret.ok();
-                },
-                remove: (index: number) => {
-                    if (!catalogue.favors[index]) return ret.err(__.shop.err.non_existent_index);
-                    const favor = catalogue.favors[index];
-                    updateFavors((favors) => favors.splice(index, 1));
-                    return ret.ok(favor);
-                },
-                get list() { return catalogue.favors; }
-            },
-        };
-    };
-    //#endregion
-
-    //#region core
-    //#region player types
-    type Rank = { level: number, name: string, cost: number };
-    type PlayerStub = {
-        id: number, gold: number, rank: number,
-        inventory: {
-            favors: string[],
-        },
-    };
-    type Player = { id: number, gold: number, rank: Omit<Rank, "cost"> };
-    //#endregion
-
-    //#region bounty types
-    type PlacedBountyDesc = { desc: "Placed", srcId: number };
-    type RoomHopBountyDesc = { desc: "Room Hop" };
-    type WallWalkBountyDesc = { desc: "Wall Walk" };
-    type BountyDesc = PlacedBountyDesc | RoomHopBountyDesc | WallWalkBountyDesc;
-    type BountyMeta = {
-        gold: number,
-        expiration: {
-            at: number,
-            duration: number,
-        },
-    };
-
-    type BountyStub = {
-        id: number,
-        reasons: (BountyDesc & BountyMeta)[],
-    };
-    type Bounty = {
-        id: number,
-        gold: number,
-        clearCost: number,
-        reasons: (Pick<BountyMeta, "gold"> & BountyDesc)[],
-    };
-    type PunishmentBountyRecords = Record<
-        Exclude<BountyDesc["desc"], "Placed">,
-        { gold: number, expiration: { duration: number } }
-    >;
-    //#endregion
-
-    export type CoreConfigAdditions = {
-        ranks: Rank[],
-        punishments: PunishmentBountyRecords,
-    };
-    type CoreConfig = Config & CoreConfigAdditions & { roles: Roles, prison: Prison };
-    export type Core = ReturnType<typeof createCore>;
-    export const createCore = ({ namespace, roles, prison, ...conf }: CoreConfig) => {
-        const ranks = Object.freeze(conf.ranks);
-        const punishments = Object.freeze(conf.punishments);
-
-        let stores = {
-            players: util.db.createKeyedCollection<PlayerStub>(namespace, "players"),
-            bounties: util.db.createKeyedCollection<BountyStub>(namespace, "bounties"),
-        };
-
-        //#region getters
-        let lastRefreshed: number = 0;
-        const refreshBountyExpiration = () => {
-            const currTime = time.unix();
-            if (currTime <= lastRefreshed) return;
-            let updated = 0;
-            lastRefreshed = currTime;
-            stores.bounties.keys.forEach(id => {
-                const b = stores.bounties.get(id);
-                if (!b) return;
-                const prevLength = b.reasons.length;
-                b.reasons = b.reasons.filter(r => r.expiration.at > currTime);
-                if (prevLength !== b.reasons.length) updated++;
-                if (!b.reasons.length) stores.bounties.delete(id, false);
-            });
-            if (updated) {
-                console.info("BCB.Core(refreshBountyExpiration):", `${updated} bounty entries updated`);
-                stores.bounties.queueUpdate();
-            }
-        };
-
-        const hydrateBountyStub = (stub: BountyStub) => {
-            let { id, reasons } = stub;
-            const gold = reasons.reduce((acc, r) => acc + r.gold, 0);
-            return Object.freeze<Bounty>({
-                id,
-                gold,
-                clearCost: Math.ceil(gold * 1.5),
-                reasons: reasons.map(({ expiration: _x, ...rest }) => rest),
-            });
-        };
-
-        const requireBounty = (id: number) => {
-            refreshBountyExpiration();
-            let stub = stores.bounties.get(id.toString());
-            if (!stub) {
-                stub = stores.bounties.set(id.toString(), {
-                    id, reasons: [],
-                });
-            }
-            return hydrateBountyStub(stub);
-        };
-
-        const getBounty = (id: number) => {
-            refreshBountyExpiration();
-            let stub = stores.bounties.get(id.toString());
-            if (!stub) return null;
-            return hydrateBountyStub(stub);
-        }
-
-        const hydratePlayerStub = (stub: PlayerStub) => {
-            const { id, gold, rank: rankId } = stub;
-            const rank = ranks[rankId];
-            return Object.freeze<Player>({
-                id, gold,
-                rank: {
-                    level: rank.level,
-                    name: rank.name,
-                },
-            });
-        };
-
-        const requirePlayer = (id: number) => {
-            let stub = stores.players.get(id.toString());
-            if (!stub) {
-                stub = stores.players.set(id.toString(), {
-                    id, gold: 0, rank: 0,
-                    inventory: { favors: [] },
-                });
-            }
-            return hydratePlayerStub(stub);
-        };
-
-        const getOwedFavors = () => stores.players.values.flatMap(
-            player => player.inventory.favors.map(
-                (favor, index) => ({ forId: player.id, forIndex: index, name: favor })
-            )
-        ).map((val, index) => ({ index, ...val }));
-        //#endregion
-
-        return {
-            requirePlayer, getBounty, requireBounty,
-            //#region bounty ops
-            canHaveBounty: (id: number) => {
-                if (prison.has(id)) return ret.err(__.core.err.is_imprisoned);
-                if (roles.lists.immunity.has(id)) return ret.err(__.core.err.is_immune);
-                return ret.ok();
-            },
-            claimBounty: (claimer: number | Player, bounty: number | Bounty | null) => {
-                if (typeof claimer === "number") claimer = requirePlayer(claimer);
-                if (typeof bounty === "number") bounty = getBounty(bounty);
-                if (!bounty) return null;
-
-                const player = stores.players.update(claimer.id.toString(), (prev) => ({
-                    gold: prev.gold + bounty.gold
-                }));
-                stores.bounties.delete(bounty.id.toString());
-                return player;
-            },
-            clearBounty: (clearer: number | Player, bounty: number | Bounty | null) => {
-                if (typeof clearer === "number") clearer = requirePlayer(clearer);
-                if (typeof bounty === "number") bounty = getBounty(bounty);
-                if (!bounty) return __.core.err.bounty_not_found;
-                if (clearer.gold < bounty.clearCost) return __.core.err.not_enough_gold;
-
-                const player = stores.players.update(clearer.id.toString(), (prev) => ({
-                    gold: prev.gold - bounty.clearCost
-                }));
-                stores.bounties.delete(bounty.id.toString());
-                return player;
-            },
-            placeBounty: (placer: number | Player, targetId: number, gold: number = 0) => {
-                if (typeof placer === "number") placer = requirePlayer(placer);
-                const bounty = requireBounty(targetId);
-
-                if (placer.gold < gold) return __.core.err.not_enough_gold;
-                const player = stores.players.update(placer.id.toString(), (prev) => ({
-                    gold: prev.gold - gold,
-                }));
-                stores.bounties.update(bounty.id.toString(), (prev) => ({
-                    reasons: [
-                        ...prev.reasons,
-                        {
-                            gold,
-                            expiration: {
-                                duration: 60 * 60 * 24 * 7,
-                                at: time.unix() + (60 * 60 * 24 * 7),
-                            },
-                            desc: "Placed",
-                            srcId: placer.id,
-                        }
-                    ]
-                }));
-                return player;
-            },
-            punishments,
-            punishmentBounty: (targetId: number, type: Exclude<BountyDesc["desc"], "Placed">) => {
-                const bounty = requireBounty(targetId);
-                if (type === "Room Hop" && bounty.reasons.find(r => r.desc === type))
-                    return null;
-                const { gold, expiration } = punishments[type];
-                return hydrateBountyStub(
-                    stores.bounties.update(targetId.toString(), (prev) => ({
-                        reasons: [
-                            ...prev.reasons,
-                            {
-                                desc: type, gold,
-                                expiration: {
-                                    duration: expiration.duration,
-                                    at: time.unix() + expiration.duration,
-                                },
-                            }
-                        ]
-                    }))
-                );
-            },
-            //#endregion
-            //#region player ops
-            ranks,
-            rankUp: (player: number | Player, newRank: Rank) => {
-                if (typeof player === "number") player = requirePlayer(player);
-                if (player.gold < newRank.cost) return __.core.err.not_enough_gold;
-                return stores.players.update(player.id.toString(), (prev) => ({
-                    gold: prev.gold - newRank.cost,
-                    rank: newRank.level,
-                }));
-            },
-            //#endregion
-            //#region gold ops
-            giveGold: (player: number | Player, gold: number) => {
-                if (typeof player === "number") player = requirePlayer(player);
-                return stores.players.update(player.id.toString(), (prev) => ({
-                    gold: prev.gold + gold,
-                }));
-            },
-            //#endregion
-            //#region favor ops
-            purchaseFavor: (player: number | Player, favor: Favor) => {
-                if (typeof player === "number") player = requirePlayer(player);
-                if (player.gold < favor.cost) return ret.err(__.core.err.not_enough_gold);
-                return ret.ok(stores.players.update(player.id.toString(), (prev) => ({
-                    gold: prev.gold - favor.cost,
-                    inventory: {
-                        favors: [
-                            ...prev.inventory.favors,
-                            favor.name,
-                        ],
-                    },
-                })));
-            },
-            getOwedFavors: (player: number | Player | null = null) => {
-                const owed = getOwedFavors();
-                if (!player) return owed;
-                if (typeof player === "number") player = requirePlayer(player);
-                return owed.filter(f => f.forId === player.id);
-            },
-            resolveFavor: (player: number | Player, index: number) => {
-                if (typeof player === "number") player = requirePlayer(player);
-                return stores.players.update(player.id.toString(), (prev) => ({
-                    inventory: {
-                        favors: prev.inventory.favors.filter((_val, idx) => idx !== index),
-                    },
-                }));
-            },
-            //#endregion
-        };
-    };
-    //#endregion
-};
-//#endregion
+import B, { __ } from "../features/bounty";
 
 export type BountyRoomOptions = GenericMapRoomOptions<{
     bounty: {
         namespace: string,
-        common: BCB.CommonConfig,
-        roles: BCB.RolesConfigAdditions,
-        core: BCB.CoreConfigAdditions,
-        prison: BCB.PrisonConfigAdditions,
+        common: B.Common.Config,
+        roles: B.Roles.Config.Additions,
+        core: B.Core.Config.Additions,
+        prison: B.Prison.Config.Additions,
     },
 }>;
 
 const MixedMapRoomClass = WithCommands(MapRoom);
 
 export class BountyRoom extends MixedMapRoomClass {
-    #util = BCB.util;
-    #common: BCB.Common;
-    #pending: BCB.Pending;
-    #roles: BCB.Roles;
-    #prison: BCB.Prison;
-    #shop: BCB.Shop;
-    #core: BCB.Core;
+    #util: B.Util;
+    #roles: B.Roles;
+    #common: B.Common;
+    #pending: B.Pending;
+    #prison: B.Prison;
+    #shop: B.Shop;
+    #core: B.Core;
+    #stayTime: B.StayTime;
 
     constructor(arg: MapRoomArguments<BountyRoomOptions>) {
-        //#region logic pre-init
-        let conf: BCB.Config = { namespace: arg.opts.bounty.namespace };
-        let common = BCB.createCommon(arg.opts.bounty.common);
-        let pending = BCB.createPending();
-        let roles = BCB.createRoles({ ...conf, ...arg.opts.bounty.roles });
-        let prison = BCB.createPrison({ ...conf, ...arg.opts.bounty.prison, common });
-        let shop = BCB.createShop(conf);
-        let core = BCB.createCore({ ...conf, ...arg.opts.bounty.core, roles, prison });
+        //#region pre-init
+        const opts = arg.opts.bounty;
+        let conf: B.Shared.Config = { namespace: opts.namespace };
+
+        const util = B.Util.create();
+        const roles = B.Roles.create({ ...conf, ...opts.roles, util });
         //#endregion
 
         //#region init
@@ -942,18 +61,43 @@ export class BountyRoom extends MixedMapRoomClass {
                 },
             },
         });
-        this.#common = common;
-        this.#pending = pending;
+
+        this.#util = util;
         this.#roles = roles;
-        this.#prison = prison;
-        this.#shop = shop;
-        this.#core = core;
+        this.#common = B.Common.create(opts.common);
+        this.#pending = B.Pending.create();
+        this.#prison = B.Prison.create({
+            ...conf, ...opts.prison,
+            util: this.#util,
+            common: this.#common,
+        });
+        this.#shop = B.Shop.create({
+            ...conf,
+            util: this.#util,
+        });
+        this.#core = B.Core.create({
+            ...conf, ...opts.core,
+            util: this.#util,
+            roles: this.#roles,
+            prison: this.#prison,
+        });
+        this.#stayTime = B.StayTime.create({
+            conn: this._conn,
+            core: this.#core,
+        });
+
         this.#setupEvents();
         this.#setupCommands();
         //#endregion
 
         //#region post-init
-        this.#prison.init({ timers: [(id) => () => this.#checkPrisonTerm(id)] });
+        this.#prison.init({
+            checkTerm: this.#prison.api.checkTerm,
+        });
+        this.#prison.api.init({
+            conn: this._conn,
+            pending: this.#pending,
+        });
         //#endregion
     }
 
@@ -965,134 +109,9 @@ export class BountyRoom extends MixedMapRoomClass {
     public override exit = async () => {
         this.#util.db.flush();
         this.#pending.purge();
-        this.#prison.stop();
+        this.#prison.sentences.timers.stop();
         await super.exit();
     };
-
-    //#region stay time
-    #tracker = (() => {
-        const players = new Map<number, ReturnType<typeof createRecord>>();
-        const util = this.#util;
-
-        const createRecord = (id: number) => ({
-            id,
-            joinedAt: time.unix(),
-            seal() {
-                const leftAt = time.unix();
-                return Object.freeze({
-                    id: this.id,
-                    joinedAt: this.joinedAt,
-                    leftAt,
-                    stayTime: leftAt - this.joinedAt,
-                });
-            }
-        });
-
-        return {
-            reset: () => players.clear(),
-            track: (id: number) => {
-                players.set(id, createRecord(id));
-            },
-            untrack: (id: number) => {
-                const record = players.get(id)?.seal() ?? null;
-                players.delete(id);
-                return record;
-            },
-        };
-    })();
-
-    #resetStayTime = () => {
-        console.info("FUNC(#resetStayTime):", "[TrackerReset]", "initial room update by bot ~ new session assumed");
-        this.#tracker.reset();
-    }
-
-    #beginStayTime = (char: API_Character) => {
-        if (!this.#core.canHaveBounty(char.MemberNumber))
-            return;
-        this.#tracker.track(char.MemberNumber);
-        const bounty = this.#core.getBounty(char.MemberNumber);
-        if ((!bounty || !bounty.reasons.find(r => r.desc === "Room Hop"))) {
-            this._conn.SendMessage(
-                "Whisper",
-                __.events.room_hop.warning,
-                char.MemberNumber
-            );
-        }
-    }
-
-    #endStayTime = (char: API_Character, intentional: boolean) => {
-        const record = this.#tracker.untrack(char.MemberNumber);
-        if (!intentional || !record) return;
-        if (record.stayTime < 10) {
-            const bounty = this.#core.punishmentBounty(char.MemberNumber, "Room Hop");
-            if (bounty)
-                this._conn.SendMessage(
-                    "Chat",
-                    __.events.room_hop.bounty(this.#core.punishments["Room Hop"].gold, char.MemberNumber),
-                );
-        }
-    }
-    //#endregion
-
-    //#region prison
-    /** @desc ~ prompts release/extend to prisoner, assumes player passed in exists */
-    #promptPrisonRelease = ({ MemberNumber }: API_Character, prisoner: BCB.Prisoner) => {
-        this._conn.SendMessage("Whisper", __.events.prison.release.prompt, MemberNumber);
-        this.#prison.flag(prisoner.id, "prompted");
-        this.#pending.response.queue(MemberNumber, (ctx, expired = false) => {
-            const player = this._conn.chatRoom?.getCharacter(MemberNumber) ?? null;
-            let release = expired;
-            if (ctx) {
-                const [res] = ctx.cmd.args;
-                if (!res || !res.length || (res[0] !== "n" && res[0] !== "y"))
-                    return player && this._conn.SendMessage(
-                        "Whisper",
-                        __.events.prison.release.unknown_response,
-                        MemberNumber,
-                    );
-                release = res[0] === 'n';
-            }
-            if (!release) {
-                if (player) this._conn.SendMessage(
-                    "Whisper",
-                    __.events.prison.release.extended,
-                    MemberNumber,
-                );
-                return this.#prison.extend(prisoner.id, 10 * 60);
-            }
-            this.#prison.flag(prisoner.id, "releasing");
-            console.info("FUNC(#promptPrisonRelease/response):", "[OnPromptResponseRelease]", `trigger(CheckPrisonTerm<${prisoner.id}>)`);
-            this.#checkPrisonTerm(prisoner.id);
-        }, (run) => run(null as never, true));
-
-    }
-
-    /** @desc ~ releases prisoner, assumes player passed in exists */
-    #releasePrisoner = (player: API_Character) => {
-        if (!this.#prison.release(player)) return;
-        this._conn.SendMessage("Whisper", __.events.prison.release.completed, player.MemberNumber);
-    }
-
-    /** @desc ~ a sanity check for prisoner state, if not in assigned cell, just sync state, forcing an assumed release */
-    #syncPrisonerRelease = (player: API_Character, prisoner: BCB.Prisoner) => {
-        if (!player.MapPos) return false;
-        if (player.MapPos.X === prisoner.cell.X && player.MapPos.Y === prisoner.cell.Y) return false;
-        this.#releasePrisoner(player);
-        return true;
-    }
-
-    /** @desc ~ runs through the whole check prisoner, check player exists flow */
-    #checkPrisonTerm = (id: number): void => {
-        const prisoner = this.#prison.getPrisoner(id);
-        if (!prisoner) return;
-        const player = this._conn.chatRoom?.getCharacter(prisoner.id) ?? null;
-        if (!player) return;
-        if (this.#syncPrisonerRelease(player, prisoner)) return;
-        if (time.unix() < prisoner.end.at) return this.#prison.requestTimer(prisoner.id, () => this.#checkPrisonTerm(id));
-        if (!prisoner.flags.prompted) return this.#promptPrisonRelease(player, prisoner);
-        if (prisoner.flags.releasing) return this.#releasePrisoner(player);
-    }
-    //#endregion
 
     //#region events
     #setupEvents = () => {
@@ -1111,11 +130,11 @@ export class BountyRoom extends MixedMapRoomClass {
         console.info("FUNC(#onBotRoomConnect):", `#pendingJoins(clear)`);
         this.#pendingJoins.clear();
 
-        this.#resetStayTime();
+        this.#stayTime.reset();
 
         for (const player of (this._conn.chatRoom?.characters ?? [])) {
             console.info("FUNC(#onCharUpdateRoom):", "[OnBotEnter]", `trigger(CheckPrisonTerm<${player.MemberNumber}>)`);
-            this.#checkPrisonTerm(player.MemberNumber);
+            this.#prison.api.checkTerm(player.MemberNumber);
         }
     }
 
@@ -1135,14 +154,14 @@ export class BountyRoom extends MixedMapRoomClass {
 
     /** @desc ~ event when character entered the map and their first map information arrived */
     #onCharEnterMap = (char: API_Character) => {
-        this.#beginStayTime(char);
+        this.#stayTime.begin(char);
 
         console.info("FUNC(#onCharEnterMap):", "[OnCharEnter]", `trigger(CheckPrisonTerm<${char.MemberNumber}>)`);
-        this.#checkPrisonTerm(char.MemberNumber);
+        this.#prison.api.checkTerm(char.MemberNumber);
     }
 
     #onCharLeft = (...[, char, , intentional]: Parameters<Parameters<typeof this._conn.on<"CharacterLeft">>[1]>) => {
-        this.#endStayTime(char, intentional);
+        this.#stayTime.end(char, intentional);
 
         console.info("FUNC(#onCharLeft):", `#pendingJoins(resolved)`, `-#${char.MemberNumber}`);
         this.#pendingJoins.delete(char.MemberNumber);
@@ -1164,11 +183,11 @@ export class BountyRoom extends MixedMapRoomClass {
 
                 const id = parseInt(strId);
                 const bountyGold = parseInt(strBountyGold);
-                const canHaveBounty = this.#core.canHaveBounty(id);
+                const canHaveBounty = this.#core.players.canHaveBounty(id);
                 if (!canHaveBounty.ok) return ctx.reply(__.cmd.put_bounty.err.bounty_immunity(ctx, id, canHaveBounty.err));
                 if (bountyGold < 20) return ctx.reply(__.cmd.put_bounty.err.need_min_gold(ctx));
 
-                const result = this.#core.placeBounty(ctx.sender.MemberNumber, id);
+                const result = this.#core.bounties.place(ctx.sender.MemberNumber, id);
                 if (typeof result === "string")
                     return ctx.reply(__.cmd.put_bounty.err.failed(result));
                 ctx.reply(__.cmd.put_bounty.placed(bountyGold, id));
@@ -1192,7 +211,7 @@ export class BountyRoom extends MixedMapRoomClass {
                 const gold = parseInt(strGold);
                 if (gold <= 0) return ctx.reply(__.cmd.give_gold.err.neg_or_zero_gold(ctx))
 
-                const result = this.#core.giveGold(id, gold);
+                const result = this.#core.players.gold.give(id, gold);
                 ctx.reply(__.cmd.give_gold.given(gold, id, result.gold));
                 this._conn.SendMessage("Whisper", __.cmd.give_gold.received(gold, result.gold), id);
             },
@@ -1211,7 +230,7 @@ export class BountyRoom extends MixedMapRoomClass {
                 const gold = parseInt(strGold);
                 if (gold <= 0) return ctx.reply(__.cmd.remove_gold.err.neg_or_zero_gold(ctx))
 
-                const result = this.#core.giveGold(id, -gold);
+                const result = this.#core.players.gold.give(id, -gold);
                 ctx.reply(__.cmd.remove_gold.removed(gold, id, result.gold));
                 this._conn.SendMessage("Whisper", __.cmd.remove_gold.lost(gold, result.gold), id);
             },
@@ -1401,11 +420,11 @@ export class BountyRoom extends MixedMapRoomClass {
                 if (!strIndex || !isValidNumber(strIndex)) return ctx.reply(__.cmd.remove_owed.err.invalid_index(ctx));
                 const index = parseInt(strIndex)
 
-                const favors = this.#core.getOwedFavors();
+                const favors = this.#core.players.favors.getOwed();
                 if (index < 1 || index > favors.length) return ctx.reply(__.cmd.remove_owed.err.index_out_of_range(ctx));
 
                 const { forId, forIndex, name } = favors[index - 1];
-                this.#core.resolveFavor(forId, forIndex);
+                this.#core.players.favors.resolve(forId, forIndex);
                 ctx.reply(__.cmd.remove_owed.resolved(name, forId));
             },
         });
@@ -1415,7 +434,7 @@ export class BountyRoom extends MixedMapRoomClass {
             name: __.cmd.display_owed.name, desc: __.cmd.display_owed.desc,
             roles: [this.#roles.Admin],
             callback: (ctx) => {
-                const favors = this.#core.getOwedFavors();
+                const favors = this.#core.players.favors.getOwed();
                 ctx.reply(
                     __.cmd.display_owed.title(favors.length),
                     ...favors.map(({ index, forId, name }) =>
@@ -1436,11 +455,11 @@ export class BountyRoom extends MixedMapRoomClass {
                 const [strId] = ctx.cmd.args;
                 if (!strId || !isValidNumber(strId)) return ctx.reply(__.cmd.release.err.invalid_id(ctx));
                 const id = parseInt(strId)
-                const prisoner = this.#prison.getPrisoner(id);
+                const prisoner = this.#prison.prisoners.get(id);
                 if (!prisoner) return ctx.reply(__.cmd.release.err.not_prisoner(id));
                 const target = this._conn.chatRoom?.getCharacter(prisoner.id) ?? null;
                 if (!target) return ctx.reply(__.cmd.release.err.not_present(id));
-                this.#releasePrisoner(target);
+                this.#prison.release(target);
             },
         });
         //#endregion
@@ -1472,7 +491,7 @@ export class BountyRoom extends MixedMapRoomClass {
         this._cmd.register({
             name: __.cmd.gold.name, desc: __.cmd.gold.desc,
             callback: (ctx) => {
-                const player = this.#core.requirePlayer(ctx.sender.MemberNumber);
+                const player = this.#core.players.require(ctx.sender.MemberNumber);
                 ctx.reply(__.cmd.gold.stat(player.gold, player.rank.level, player.rank.name));
             },
         });
@@ -1481,7 +500,7 @@ export class BountyRoom extends MixedMapRoomClass {
         this._cmd.register({
             name: __.cmd.favors.name, desc: __.cmd.favors.desc,
             callback: (ctx) => {
-                const favors = this.#core.getOwedFavors(ctx.sender.MemberNumber);
+                const favors = this.#core.players.favors.getOwed(ctx.sender.MemberNumber);
                 ctx.reply(
                     __.cmd.favors.title(favors.length),
                     ...favors.map(({ name }) => __.cmd.favors.entry(name)),
@@ -1493,14 +512,14 @@ export class BountyRoom extends MixedMapRoomClass {
         this._cmd.register({
             name: __.cmd.rankup.name, desc: __.cmd.rankup.desc,
             callback: (ctx) => {
-                const player = this.#core.requirePlayer(ctx.sender.MemberNumber);
-                if (player.rank.level >= this.#core.ranks.length - 1)
+                const player = this.#core.players.require(ctx.sender.MemberNumber);
+                if (player.rank.level >= this.#core.players.ranks.length - 1)
                     return ctx.reply(__.cmd.rankup.at_max_rank(player.rank.name));
 
-                const nextRank = this.#core.ranks[player.rank.level + 1];
+                const nextRank = this.#core.players.ranks[player.rank.level + 1];
                 ctx.reply(__.cmd.rankup.info(
                     player.rank.name, player.rank.level,
-                    this.#core.ranks.length - 1,
+                    this.#core.players.ranks.length - 1,
                     nextRank.name, nextRank.cost,
                     player.gold
                 ));
@@ -1511,22 +530,22 @@ export class BountyRoom extends MixedMapRoomClass {
         this._cmd.register({
             name: __.cmd.purchase_rankup.name, desc: __.cmd.purchase_rankup.desc,
             callback: (ctx) => {
-                const player = this.#core.requirePlayer(ctx.sender.MemberNumber);
-                if (player.rank.level >= this.#core.ranks.length - 1)
+                const player = this.#core.players.require(ctx.sender.MemberNumber);
+                if (player.rank.level >= this.#core.players.ranks.length - 1)
                     return ctx.reply(__.cmd.purchase_rankup.at_max_rank);
 
-                const nextRank = this.#core.ranks[player.rank.level + 1];
+                const nextRank = this.#core.players.ranks[player.rank.level + 1];
                 if (player.gold < nextRank.cost)
                     return ctx.reply(__.cmd.purchase_rankup.err.not_enough_gold(nextRank.name, nextRank.cost, player.gold));
 
                 const originalInfo = { player };
                 ctx.reply(__.cmd.purchase_rankup.prompt(nextRank.name, nextRank.cost, player.gold));
                 this.#pending.confirm.queue(ctx.sender.MemberNumber, (ctx) => {
-                    const player = this.#core.requirePlayer(ctx.sender.MemberNumber);
+                    const player = this.#core.players.require(ctx.sender.MemberNumber);
                     if (player.gold !== originalInfo.player.gold)
                         return ctx.reply(__.cmd.purchase_rankup.err.mismatch);
 
-                    const result = this.#core.rankUp(player, nextRank);
+                    const result = this.#core.players.ranks.promote(player, nextRank);
                     if (typeof result === "string")
                         return ctx.reply(__.cmd.purchase_rankup.err.failed(result));
                     ctx.reply(__.cmd.purchase_rankup.success(nextRank.name, result.gold));
@@ -1568,7 +587,7 @@ export class BountyRoom extends MixedMapRoomClass {
                     return ctx.reply(__.cmd.buy.err.index_out_of_range(ctx));
 
                 const favor = favors[index - 1];
-                const purchased = this.#core.purchaseFavor(ctx.sender.MemberNumber, favor);
+                const purchased = this.#core.players.favors.purchase(ctx.sender.MemberNumber, favor);
                 if (!purchased.ok) return ctx.reply(__.cmd.buy.err.failed(purchased.err));
                 ctx.reply(__.cmd.buy.bought(favor.name));
             },
@@ -1584,7 +603,7 @@ export class BountyRoom extends MixedMapRoomClass {
                 if (!strId || !isValidNumber(strId)) return ctx.reply(__.cmd.bounty.err.invalid_id(ctx));
 
                 const id = parseInt(strId);
-                const bounty = this.#core.getBounty(id);
+                const bounty = this.#core.bounties.get(id);
                 if (!bounty) return ctx.reply(__.cmd.bounty.no_bounty(id));
                 ctx.reply(__.cmd.bounty.bounty(id, bounty.gold));
             },
@@ -1600,12 +619,12 @@ export class BountyRoom extends MixedMapRoomClass {
                 const players = (this._conn.chatRoom?.characters ?? []).filter(p => p.MapPos);
                 const target = players.find(c =>
                     c.MemberNumber !== ctx.sender.MemberNumber &&
-                    this.#core.getBounty(c.MemberNumber) &&
+                    this.#core.bounties.get(c.MemberNumber) &&
                     this.#common.areas.BountyTarget.covers(c.MapPos)
                 );
                 if (!target) return ctx.reply(__.cmd.claim_bounty.err.no_targets);
 
-                const bounty = this.#core.getBounty(target.MemberNumber);
+                const bounty = this.#core.bounties.get(target.MemberNumber);
                 if (!bounty) return ctx.reply(__.cmd.claim_bounty.err.no_bounty);
 
                 const cells = this.#prison.cells.free.filter(tile =>
@@ -1616,15 +635,17 @@ export class BountyRoom extends MixedMapRoomClass {
                 const targetMeta = parseApiCharObj(target);
                 const prisoner = this.#prison.admit({
                     bounty,
-                    botName: this._conn.Player.Name,
-                    targetName: targetMeta.name,
-                    target,
                     cell: pickRandom(cells),
+                    target,
+                    names: {
+                        bot: this._conn.Player.Name,
+                        target: targetMeta.name,
+                    },
                 });
                 if (typeof prisoner === "string")
                     return ctx.reply(__.cmd.claim_bounty.err.admit_failed(prisoner));
 
-                const claimer = this.#core.claimBounty(ctx.sender.MemberNumber, bounty);
+                const claimer = this.#core.bounties.claim(ctx.sender.MemberNumber, bounty);
                 if (!claimer) return ctx.reply(__.cmd.claim_bounty.err.internal_error);
                 ctx.reply(__.cmd.claim_bounty.collected(bounty.gold, claimer.gold));
                 this._conn.SendMessage(
@@ -1651,10 +672,10 @@ export class BountyRoom extends MixedMapRoomClass {
                 if (!strId || !isValidNumber(strId)) return ctx.reply(__.cmd.clear_bounty.err.invalid_id(ctx));
 
                 const id = parseInt(strId);
-                const bounty = this.#core.getBounty(id);
+                const bounty = this.#core.bounties.get(id);
                 if (!bounty) return ctx.reply(__.cmd.clear_bounty.err.no_bounty(id));
 
-                const player = this.#core.requirePlayer(ctx.sender.MemberNumber);
+                const player = this.#core.players.require(ctx.sender.MemberNumber);
                 const infoPrefix = __.cmd.clear_bounty.info_prefix(id, bounty.gold, bounty.clearCost);
                 if (player.gold < bounty.clearCost)
                     return ctx.reply(__.cmd.clear_bounty.err.not_enough_gold(infoPrefix, player.gold));
@@ -1662,12 +683,12 @@ export class BountyRoom extends MixedMapRoomClass {
                 const originalInfo = { player, bounty };
                 ctx.reply(__.cmd.clear_bounty.prompt(infoPrefix, player.gold));
                 this.#pending.confirm.queue(ctx.sender.MemberNumber, (ctx) => {
-                    const bounty = this.#core.getBounty(id);
-                    const player = this.#core.requirePlayer(ctx.sender.MemberNumber);
+                    const bounty = this.#core.bounties.get(id);
+                    const player = this.#core.players.require(ctx.sender.MemberNumber);
                     if (player.gold !== originalInfo.player.gold || !bounty || bounty.gold !== originalInfo.bounty.gold)
                         return ctx.reply(__.cmd.clear_bounty.err.mismatch(id));
 
-                    const result = this.#core.clearBounty(player, bounty);
+                    const result = this.#core.bounties.clear(player, bounty);
                     if (typeof result === "string")
                         return ctx.reply(__.cmd.clear_bounty.err.failed(result));
                     ctx.reply(__.cmd.clear_bounty.cleared(id, bounty.clearCost, result.gold));
@@ -1690,14 +711,14 @@ export class BountyRoom extends MixedMapRoomClass {
 
                 const id = parseInt(strId);
                 const bountyGold = parseInt(strBountyGold);
-                const canHaveBounty = this.#core.canHaveBounty(id);
+                const canHaveBounty = this.#core.players.canHaveBounty(id);
                 if (!canHaveBounty.ok) return ctx.reply(__.cmd.place_bounty.err.bounty_immunity(ctx, id, canHaveBounty.err));
                 if (bountyGold < 20) return ctx.reply(__.cmd.place_bounty.err.need_min_gold(ctx))
 
-                const player = this.#core.requirePlayer(ctx.sender.MemberNumber);
+                const player = this.#core.players.require(ctx.sender.MemberNumber);
                 if (player.gold < bountyGold) return ctx.reply(__.cmd.place_bounty.err.not_enough_gold(player.gold));
 
-                const result = this.#core.placeBounty(player, id, bountyGold);
+                const result = this.#core.bounties.place(player, id, bountyGold);
                 if (typeof result === "string")
                     return ctx.reply(__.cmd.place_bounty.err.failed(result));
                 ctx.reply(__.cmd.place_bounty.placed(bountyGold, id, result.gold));
