@@ -1,5 +1,4 @@
 import path from "node:path";
-//@ts-ignore
 import { API_Connector, RoomDefinition } from "bc-bot";
 import { MapRoom, MapRoomStore } from "./rooms/map-room";
 import { LogContext, ObjStore } from "./utils";

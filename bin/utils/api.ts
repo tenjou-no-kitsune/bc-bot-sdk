@@ -1,4 +1,3 @@
-// @ts-ignore
 import { API_Character } from "bc-bot";
 import { str } from "./common";
 

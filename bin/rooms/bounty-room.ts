@@ -1,4 +1,3 @@
-//@ts-ignore
 import { API_Character } from "bc-bot";
 import { GenericMapRoomOptions, MapRoom, MapRoomArguments } from "./map-room";
 import { time, isValidNumber, parseApiCharObj, pickRandom } from "../utils";

@@ -1,4 +1,3 @@
-//@ts-ignore
 import type { TellType } from "bc-bot";
 import _shared from "../features/_shared";
 import { CommandContext, WithCommands } from "../mixins";

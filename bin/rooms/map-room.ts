@@ -16,7 +16,6 @@ import {
     API_Character,
     API_Connector,
     API_Message,
-//@ts-ignore
 } from "bc-bot";
 import { ChatRoomMapManager } from "../vendor/bc/chat-room-map-view";
 import { ObjStore, areArraysEqual, ensure, parseApiCharObj } from "../utils";

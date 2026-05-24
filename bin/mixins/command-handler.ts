@@ -2,7 +2,6 @@ import {
     API_Character,
     API_Connector,
     API_Message
-// @ts-ignore
 } from "bc-bot";
 import { DeepPartial, Satisfies, obj } from "../utils";
 

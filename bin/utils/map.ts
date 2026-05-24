@@ -1,4 +1,3 @@
-//@ts-ignore
 import { MapRegion } from "bc-bot";
 
 type Pos = ChatRoomMapPos;

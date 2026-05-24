@@ -1,5 +1,4 @@
 
-//@ts-ignore
 import { RoomDefinition } from "bc-bot";
 import { PartialMixinOptions } from "./mixins";
 import { RoomClasses, RoomOptions } from "./rooms";

@@ -2,14 +2,15 @@
     "name": "ropeybot",
     "license": "Apache-2.0",
     "private": "true",
+    "type": "module",
     "scripts": {
         "preinstall": "cd src && pnpm install",
         "types": "tsc",
         "prettier": "prettier -c .",
         "compile:bc-bot": "cd src && pnpm run compile",
         "bundle": "pnpm run compile:bc-bot && pnpm run build && pnpm run build:min",
-        "build": "esbuild bin/main.ts --bundle --platform=node --outfile=dist/bundle.js --sourcemap",
-        "build:min": "esbuild bin/main.ts --bundle --platform=node --outfile=dist/bundle.min.js --sourcemap --minify",
+        "build": "esbuild bin/main.ts --bundle --platform=node --outfile=dist/bundle.cjs --sourcemap",
+        "build:min": "esbuild bin/main.ts --bundle --platform=node --outfile=dist/bundle.min.cjs --sourcemap --minify",
         "start": "pnpm run compile:bc-bot && tsx bin/main.ts",
         "docker": "pnpm run bundle && docker build -t ropeybot --no-cache ."
     },
