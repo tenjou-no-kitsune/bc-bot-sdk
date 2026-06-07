@@ -342,7 +342,6 @@ export class ConfessionRoom extends MixedMapRoomClass {
 
     public override init = async () => {
         await super.init();
-        this._conn.Player.SetActivePose(["BackBoxTie"]);
         this.#refreshDescription();
         this.#store.register({
             hooks: {
@@ -381,12 +380,13 @@ export class ConfessionRoom extends MixedMapRoomClass {
 
     //#region events
     #registerEvents = () => {
-        this._conn.on("RoomJoin", this.#onBotRoomConnect);
-        this._conn.on("RoomCreate", this.#onBotRoomConnect);
+        this._conn.handlers.register("RoomJoin", this.#onBotRoomConnect);
+        this._conn.handlers.register("RoomCreate", this.#onBotRoomConnect);
     }
 
-    #onBotRoomConnect = () => {
+    #onBotRoomConnect = async () => {
         console.info("FUNC(#onBotRoomConnect)");
+        this._conn.Player.SetActivePose(["BackBoxTie"]);
         this.#refreshDescription();
     }
     //#endregion

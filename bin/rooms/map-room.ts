@@ -20,6 +20,7 @@ import {
 import { ChatRoomMapManager } from "../vendor/bc/chat-room-map-view";
 import { ObjStore, areArraysEqual, ensure, parseApiCharObj } from "../utils";
 import { MixinConstructor, PartialMixinOptions } from "../mixins";
+import { Connector } from "../features/_shared";
 
 type RoomDefinitionOptions = {
     name: string,
@@ -67,21 +68,21 @@ export type MapRoomArguments<T = MapRoomOptions> = {
 export type MapRoomLike = MixinConstructor<MapRoom>;
 
 export class MapRoom {
-    protected _conn: API_Connector;
+    protected _conn: Connector;
     #opts: MapRoomOptions;
     #store: ObjStore<MapRoomStore>
 
     public constructor({ conn, opts, store }: MapRoomArguments) {
-        this._conn = conn;
+        this._conn = Connector.create(conn);
         this.#opts = opts;
         this.#store = store;
 
         this._conn.on("Message", this.#onGenericMsg);
         this._conn.on("CharacterEntered", this.#onCharEnter);
         this._conn.on("CharacterLeft", this.#onCharLeft as never);
-        this._conn.on("RoomCreate", this.#onChatRoomCreated);
         this._conn.on("RoomUpdate", this.#onChatRoomUpdated);
-        this._conn.on("RoomJoin", this.#onChatRoomJoined);
+        this._conn.handlers.register("RoomCreate", this.#onChatRoomCreated);
+        this._conn.handlers.register("RoomJoin", this.#onChatRoomJoined);
     }
 
     public async init() {
