@@ -74,6 +74,8 @@ namespace Confessions {
     export type Text = string | { type: TellType, contents: string };
     export type Texts = {
         submitted: (type: Entry.Type) => Text;
+        empty: (type: Entry.Type) => Text;
+        view: (type: Entry.Type, entries: readonly string[]) => Text;
     };
 
     type Player = {
@@ -333,6 +335,15 @@ export class ConfessionRoom extends MixedMapRoomClass {
                     `Feel free to come again after that to submit another ${type}!`
                 ),
             }),
+            empty: (type) => `There are no ${type}s currently.`,
+            view: (type, entries) => ({
+                type: "Whisper",
+                contents: ([
+                    `=< >=`,
+                    `The current list of ${type}s are:`,
+                    ...entries.map(entry => `- ${entry}`),
+                ]).join("\n"),
+            }),
         }, this.#texts);
         
         this.#description = { header: this.#opts.bot.description };
@@ -342,7 +353,7 @@ export class ConfessionRoom extends MixedMapRoomClass {
 
     public override init = async () => {
         await super.init();
-        this.#refreshDescription();
+        await this.#onBotRoomConnect();
         this.#store.register({
             hooks: {
                 refreshDescription: this.#refreshDescription,
@@ -398,14 +409,28 @@ export class ConfessionRoom extends MixedMapRoomClass {
         this._cmd.register({
             name: "confess",
             desc: "confess something [daily refresh @ 00:00 UTC]",
-            callback: (ctx) => this.#onConfess("confession", "confess", ctx),
+            callback: (ctx) => this.#onConfess(ctx, "confession", "confess"),
+        });
+
+        // !confessions
+        this._cmd.register({
+            name: "confessions",
+            desc: "view anonymous confessions in today's cycle",
+            callback: (ctx) => this.#onView(ctx, "confession"),
         });
 
         // !sin (sin)
         this._cmd.register({
             name: "sin",
             desc: "confess a sin [weekly Monday refresh @ 00:00 UTC]",
-            callback: (ctx) => this.#onConfess("sin", "sin", ctx),
+            callback: (ctx) => this.#onConfess(ctx, "sin", "sin"),
+        });
+
+        // !sins
+        this._cmd.register({
+            name: "sins",
+            desc: "view anonymous sins in the current week cycle",
+            callback: (ctx) => this.#onView(ctx, "sin"),
         });
 
         // !index
@@ -440,7 +465,7 @@ export class ConfessionRoom extends MixedMapRoomClass {
 
     }
 
-    #onConfess = (type: Confessions.Entry.Type, command: string, ctx: CommandContext) => {
+    #onConfess = (ctx: CommandContext, type: Confessions.Entry.Type, command: string) => {
         console.info(`EVENT(#onConfess)`, ctx.cmd);
         const text = ctx.cmd.raw.substring(command.length).trim();
         if (text === "")
@@ -455,8 +480,18 @@ export class ConfessionRoom extends MixedMapRoomClass {
         });
         if (!result.ok) return ctx.reply(result.err);
 
-        this.#sendText(this.#texts.submitted(type));
+        this.#sendText(this.#texts.submitted(type), ctx);
         this.#refreshDescription();
+    }
+
+    #onView = (ctx: CommandContext, type: Confessions.Entry.Type) => {
+        const entries = this.#store.entries[type];
+        this.#sendText(
+            entries.length
+                ? this.#texts.view(type, entries)
+                : this.#texts.empty(type),
+            ctx
+        );
     }
     //#endregion
 
